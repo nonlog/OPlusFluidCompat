@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "io.github.nonlog.oplusfluidcompat"
-    compileSdk = 37
+    compileSdk = 36
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
@@ -37,5 +37,4 @@ android {
 
 dependencies {
     compileOnly(libs.libxposed.api)
-    implementation(libs.libxposed.service)
 }
