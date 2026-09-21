@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -52,3 +52,10 @@ jobs:
           name: OPlusFluidCompat-apk
           path: dist/*.apk
           if-no-files-found: error
+
+      - name: Publish test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="ci-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" dist/OPlusFluidCompat.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "OPlusFluidCompat CI $GITHUB_RUN_NUMBER" --notes "Automated test build from $GITHUB_SHA" --prerelease
