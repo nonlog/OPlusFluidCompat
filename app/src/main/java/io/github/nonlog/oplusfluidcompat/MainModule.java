@@ -1,7 +1,8 @@
 package io.github.nonlog.oplusfluidcompat;
 
-import android.content.Context;
-import android.content.pm.PackageManager;
+import android.app.Notification;
+import android.os.Bundle;
+import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
 import java.lang.reflect.Method;
@@ -14,13 +15,18 @@ import io.github.libxposed.api.XposedModule;
 public final class MainModule extends XposedModule {
     private static final String TAG = "OPlusFluidCompat";
     private static final String SYSTEM_UI = "com.android.systemui";
-    private static final String INSTANT_PLATFORM = "com.nearme.instant.platform";
     private static final String AMAP_PACKAGE = "com.autonavi.minimap";
-    private static final String AMAP_NAVIGATION_RPK = "com.autonavi.minimap.quick.navigation";
-    private static final String FLASH_PERMISSION = "com.oplus.flashback.permission.FLASH_VIEWS_SERVICE";
+    private static final String AMAP_ROUTE_CHANNEL = "ROUTE_CHANNEL_ID";
+    private static final String AMAP_LIVE_ALERT_SERVICE_URI =
+            "intent:#Intent;action=com.amap.minimap.immersenavi.AMapImmerseNaviService;"
+                    + "component=com.autonavi.minimap/com.autonavi.minimap.immersenavi.AMapImmerseNaviService;end";
 
-    private static volatile Context systemUiContext;
-    private static final Set<String> loggedPackages = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private static final String KEY_LIVE_ALERT_SERVICE = "liveAlertService";
+    private static final String KEY_IMMERSIVE_CARD_TYPE = "immersiveCardType";
+    private static final int IMMERSIVE_CARD_TYPE_SURFACE = 2;
+
+    private static final Set<String> loggedEvents =
+            Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
@@ -29,113 +35,123 @@ public final class MainModule extends XposedModule {
 
     @Override
     public void onPackageReady(PackageReadyParam param) {
-        String pkg = param.getPackageName();
-        if (SYSTEM_UI.equals(pkg)) {
-            installSystemUiHooks(param.getClassLoader());
-        } else if (INSTANT_PLATFORM.equals(pkg)) {
-            installInstantPlatformHooks(param.getClassLoader());
-        }
-    }
-
-    private void installInstantPlatformHooks(ClassLoader cl) {
-        try {
-            Class<?> cls = Class.forName("a.a.a.k35", false, cl);
-            Method method = cls.getDeclaredMethod("c", Context.class, String.class, String.class);
-            method.setAccessible(true);
-            hook(method).intercept(chain -> {
-                String targetRpk = (String) chain.getArg(1);
-                String sourcePkg = (String) chain.getArg(2);
-                if (AMAP_PACKAGE.equals(sourcePkg) && AMAP_NAVIGATION_RPK.equals(targetRpk)) {
-                    logUnlocked(sourcePkg, "Instant SharedStorage writer gate for " + targetRpk);
-                    return true;
-                }
-                return chain.proceed();
-            });
-            log(Log.INFO, TAG, "hooked Instant PermissionVerifier.k35.c");
-        } catch (Throwable t) {
-            log(Log.ERROR, TAG, "failed to hook Instant SharedStorage writer gate", t);
-        }
+        if (!SYSTEM_UI.equals(param.getPackageName())) return;
+        installSystemUiHooks(param.getClassLoader());
     }
 
     private void installSystemUiHooks(ClassLoader cl) {
         int installed = 0;
-        installed += hookValidCaller(cl) ? 1 : 0;
-        installed += hookSupportByPackage(cl) ? 1 : 0;
-        installed += hookSupportByUid(cl) ? 1 : 0;
-        log(Log.INFO, TAG, "SystemUI hooks installed: " + installed + "/3");
+        installed += hookLiveAlertEligibility(cl) ? 1 : 0;
+        installed += hookAmapNativeImmersiveMetadata(cl) ? 1 : 0;
+        log(Log.INFO, TAG, "native Live Alert hooks installed: " + installed + "/2");
     }
 
-    private boolean hookValidCaller(ClassLoader cl) {
+    /**
+     * OxygenOS asks the dynamically loaded Seedling plugin whether each notification is allowed
+     * to become a Live Alert. Its RUS table contains com.amap.navi.demo on the tested ROM but not
+     * the production AMap package. Bypass only that missing package entry, and only for AMap's
+     * real navigation foreground notification.
+     */
+    private boolean hookLiveAlertEligibility(ClassLoader cl) {
         try {
-            Class<?> cls = Class.forName("com.oplus.flashback.settings.utils.SettingsUtils", false, cl);
-            Method method = cls.getDeclaredMethod("isValidCaller", Context.class, String.class);
+            Class<?> entryClass = Class.forName(
+                    "com.android.systemui.statusbar.notification.collection.NotificationEntry",
+                    false,
+                    cl);
+            Class<?> filterClass = Class.forName(
+                    "com.oplus.systemui.statusbar.notification.livealert.data.repository.OplusLiveAlertFilterByPlugin",
+                    false,
+                    cl);
+            Method method = filterClass.getDeclaredMethod("shouldFilter", entryClass);
             method.setAccessible(true);
             hook(method).intercept(chain -> {
-                Context context = (Context) chain.getArg(0);
-                String pkg = (String) chain.getArg(1);
-                rememberContext(context);
-                if (isEligible(context, pkg)) { logUnlocked(pkg, "caller certification"); return true; }
+                StatusBarNotification sbn = getStatusBarNotification(chain.getArg(0));
+                if (isAmapNavigation(sbn)) {
+                    logOnce("amap-eligibility", "allow native Live Alert eligibility for AMap navigation");
+                    return true;
+                }
                 return chain.proceed();
             });
-            log(Log.INFO, TAG, "hooked SettingsUtils.isValidCaller");
+            log(Log.INFO, TAG, "hooked OplusLiveAlertFilterByPlugin.shouldFilter");
             return true;
-        } catch (Throwable t) { log(Log.ERROR, TAG, "failed to hook SettingsUtils.isValidCaller", t); return false; }
+        } catch (Throwable t) {
+            log(Log.ERROR, TAG, "failed to hook native Live Alert eligibility", t);
+            return false;
+        }
     }
 
-    private boolean hookSupportByPackage(ClassLoader cl) {
+    /**
+     * ColorOS supplies the native immersive-service mapping as part of its Live Alert registration
+     * data. OxygenOS lacks the production AMap entry even though AMap declares
+     * livealert.immersive.card=1 and exports AMapImmerseNaviService. Restore only those missing
+     * metadata fields. The OPlus IntentMessenger still performs the service bind and AMap itself
+     * renders the SurfacePackage; this does not synthesize a generic Live Alert UI.
+     */
+    private boolean hookAmapNativeImmersiveMetadata(ClassLoader cl) {
         try {
-            Class<?> cls = Class.forName("com.oplus.flashback.manager.ConfigurationManager", false, cl);
-            Method method = cls.getDeclaredMethod("isSupportFlashViews", String.class);
+            Class<?> entryClass = Class.forName(
+                    "com.android.systemui.statusbar.notification.collection.NotificationEntry",
+                    false,
+                    cl);
+            Class<?> repositoryClass = Class.forName(
+                    "com.oplus.systemui.statusbar.notification.livealert.data.repository.OplusLiveAlertNotificationsRepository",
+                    false,
+                    cl);
+            Method method = repositoryClass.getDeclaredMethod(
+                    "entryToLiveAlert", entryClass, int.class, boolean.class);
             method.setAccessible(true);
             hook(method).intercept(chain -> {
-                String pkg = (String) chain.getArg(0);
-                Context context = systemUiContext;
-                if (context != null && isEligible(context, pkg)) { logUnlocked(pkg, "support list / region gate"); return true; }
+                StatusBarNotification sbn = getStatusBarNotification(chain.getArg(0));
+                if (isAmapNavigation(sbn)) {
+                    Notification notification = sbn.getNotification();
+                    Bundle extras = notification != null ? notification.extras : null;
+                    if (extras != null) {
+                        String existingService = extras.getString(KEY_LIVE_ALERT_SERVICE, "");
+                        if (existingService == null || existingService.isEmpty()) {
+                            extras.putString(KEY_LIVE_ALERT_SERVICE, AMAP_LIVE_ALERT_SERVICE_URI);
+                        }
+                        if (extras.getInt(KEY_IMMERSIVE_CARD_TYPE, -1) == -1) {
+                            extras.putInt(KEY_IMMERSIVE_CARD_TYPE, IMMERSIVE_CARD_TYPE_SURFACE);
+                        }
+                        logOnce(
+                                "amap-native-service",
+                                "restore AMap native immersive service mapping: "
+                                        + extras.getString(KEY_LIVE_ALERT_SERVICE, "")
+                                        + ", immersiveCardType="
+                                        + extras.getInt(KEY_IMMERSIVE_CARD_TYPE, -1));
+                    }
+                }
                 return chain.proceed();
             });
-            log(Log.INFO, TAG, "hooked ConfigurationManager.isSupportFlashViews(String)");
+            log(Log.INFO, TAG, "hooked OplusLiveAlertNotificationsRepository.entryToLiveAlert");
             return true;
-        } catch (Throwable t) { log(Log.ERROR, TAG, "failed to hook package support check", t); return false; }
+        } catch (Throwable t) {
+            log(Log.ERROR, TAG, "failed to hook AMap native immersive metadata", t);
+            return false;
+        }
     }
 
-    private boolean hookSupportByUid(ClassLoader cl) {
+    private StatusBarNotification getStatusBarNotification(Object notificationEntry) {
+        if (notificationEntry == null) return null;
         try {
-            Class<?> cls = Class.forName("com.oplus.flashback.manager.ConfigurationManager", false, cl);
-            Method method = cls.getDeclaredMethod("isSupportFlashViews", Context.class, int.class);
-            method.setAccessible(true);
-            hook(method).intercept(chain -> {
-                Context context = (Context) chain.getArg(0);
-                int uid = (Integer) chain.getArg(1);
-                rememberContext(context);
-                if (hasEligiblePackageForUid(context, uid)) return true;
-                return chain.proceed();
-            });
-            log(Log.INFO, TAG, "hooked ConfigurationManager.isSupportFlashViews(Context,int)");
-            return true;
-        } catch (Throwable t) { log(Log.ERROR, TAG, "failed to hook uid support check", t); return false; }
+            Method getSbn = notificationEntry.getClass().getMethod("getSbn");
+            Object value = getSbn.invoke(notificationEntry);
+            return value instanceof StatusBarNotification ? (StatusBarNotification) value : null;
+        } catch (Throwable t) {
+            logOnce("get-sbn-failed", "failed to read NotificationEntry.getSbn: " + t);
+            return null;
+        }
     }
 
-    private static void rememberContext(Context context) {
-        if (context != null) { Context app = context.getApplicationContext(); systemUiContext = app != null ? app : context; }
+    private static boolean isAmapNavigation(StatusBarNotification sbn) {
+        if (sbn == null || !AMAP_PACKAGE.equals(sbn.getPackageName())) return false;
+        Notification notification = sbn.getNotification();
+        if (notification == null) return false;
+        return Notification.CATEGORY_NAVIGATION.equals(notification.category)
+                || AMAP_ROUTE_CHANNEL.equals(notification.getChannelId());
     }
 
-    private boolean hasEligiblePackageForUid(Context context, int uid) {
-        if (context == null) return false;
-        try {
-            String[] packages = context.getPackageManager().getPackagesForUid(uid);
-            if (packages == null) return false;
-            for (String pkg : packages) if (isEligible(context, pkg)) { logUnlocked(pkg, "uid support gate"); return true; }
-        } catch (Throwable t) { log(Log.WARN, TAG, "uid eligibility check failed: " + t); }
-        return false;
-    }
-
-    private boolean isEligible(Context context, String pkg) {
-        if (context == null || pkg == null || pkg.isEmpty() || SYSTEM_UI.equals(pkg)) return false;
-        try { return context.getPackageManager().checkPermission(FLASH_PERMISSION, pkg) == PackageManager.PERMISSION_GRANTED; }
-        catch (Throwable t) { log(Log.WARN, TAG, "permission check failed for " + pkg + ": " + t); return false; }
-    }
-
-    private void logUnlocked(String pkg, String gate) {
-        if (pkg != null && loggedPackages.add(pkg + "@" + gate)) log(Log.INFO, TAG, "unlock " + gate + " for " + pkg);
+    private void logOnce(String key, String message) {
+        if (loggedEvents.add(key)) log(Log.INFO, TAG, message);
     }
 }

@@ -5,14 +5,5 @@
         android:description="@string/module_description"
         android:hasCode="true"
         android:allowBackup="false"
-        android:supportsRtl="true">
-
-        <!-- Diagnostic compatibility endpoint for apps using the T/TAF IntelligentIntent API.
-             Access is restricted again inside the provider to the explicitly supported caller. -->
-        <provider
-            android:name=".IntelligentIntentProvider"
-            android:authorities="IntelligentIntent"
-            android:enabled="true"
-            android:exported="true" />
-    </application>
+        android:supportsRtl="true" />
 </manifest>
