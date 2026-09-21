@@ -4,13 +4,13 @@ plugins {
 
 android {
     namespace = "io.github.nonlog.oplusfluidcompat"
-    compileSdk = 37
+    compileSdk = 36
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "io.github.nonlog.oplusfluidcompat"
         minSdk = 35
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }
