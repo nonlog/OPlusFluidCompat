@@ -21,7 +21,7 @@ public final class MainModule extends XposedModule {
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
-        logd(Log.INFO, TAG, "loaded in " + param.getProcessName());
+        log(Log.INFO, TAG, "loaded in " + param.getProcessName());
     }
 
     @Override
@@ -35,7 +35,7 @@ public final class MainModule extends XposedModule {
         installed += hookValidCaller(cl) ? 1 : 0;
         installed += hookSupportByPackage(cl) ? 1 : 0;
         installed += hookSupportByUid(cl) ? 1 : 0;
-        logd(Log.INFO, TAG, "SystemUI hooks installed: " + installed + "/3");
+        log(Log.INFO, TAG, "SystemUI hooks installed: " + installed + "/3");
     }
 
     private boolean hookValidCaller(ClassLoader cl) {
@@ -50,9 +50,9 @@ public final class MainModule extends XposedModule {
                 if (isEligible(context, pkg)) { logUnlocked(pkg, "caller certification"); return true; }
                 return chain.proceed();
             });
-            logd(Log.INFO, TAG, "hooked SettingsUtils.isValidCaller");
+            log(Log.INFO, TAG, "hooked SettingsUtils.isValidCaller");
             return true;
-        } catch (Throwable t) { logd(Log.ERROR, TAG, "failed to hook SettingsUtils.isValidCaller", t); return false; }
+        } catch (Throwable t) { log(Log.ERROR, TAG, "failed to hook SettingsUtils.isValidCaller", t); return false; }
     }
 
     private boolean hookSupportByPackage(ClassLoader cl) {
@@ -66,9 +66,9 @@ public final class MainModule extends XposedModule {
                 if (context != null && isEligible(context, pkg)) { logUnlocked(pkg, "support list / region gate"); return true; }
                 return chain.proceed();
             });
-            logd(Log.INFO, TAG, "hooked ConfigurationManager.isSupportFlashViews(String)");
+            log(Log.INFO, TAG, "hooked ConfigurationManager.isSupportFlashViews(String)");
             return true;
-        } catch (Throwable t) { logd(Log.ERROR, TAG, "failed to hook package support check", t); return false; }
+        } catch (Throwable t) { log(Log.ERROR, TAG, "failed to hook package support check", t); return false; }
     }
 
     private boolean hookSupportByUid(ClassLoader cl) {
@@ -83,9 +83,9 @@ public final class MainModule extends XposedModule {
                 if (hasEligiblePackageForUid(context, uid)) return true;
                 return chain.proceed();
             });
-            logd(Log.INFO, TAG, "hooked ConfigurationManager.isSupportFlashViews(Context,int)");
+            log(Log.INFO, TAG, "hooked ConfigurationManager.isSupportFlashViews(Context,int)");
             return true;
-        } catch (Throwable t) { logd(Log.ERROR, TAG, "failed to hook uid support check", t); return false; }
+        } catch (Throwable t) { log(Log.ERROR, TAG, "failed to hook uid support check", t); return false; }
     }
 
     private static void rememberContext(Context context) {
@@ -98,17 +98,17 @@ public final class MainModule extends XposedModule {
             String[] packages = context.getPackageManager().getPackagesForUid(uid);
             if (packages == null) return false;
             for (String pkg : packages) if (isEligible(context, pkg)) { logUnlocked(pkg, "uid support gate"); return true; }
-        } catch (Throwable t) { logd(Log.WARN, TAG, "uid eligibility check failed: " + t); }
+        } catch (Throwable t) { log(Log.WARN, TAG, "uid eligibility check failed: " + t); }
         return false;
     }
 
     private boolean isEligible(Context context, String pkg) {
         if (context == null || pkg == null || pkg.isEmpty() || SYSTEM_UI.equals(pkg)) return false;
         try { return context.getPackageManager().checkPermission(FLASH_PERMISSION, pkg) == PackageManager.PERMISSION_GRANTED; }
-        catch (Throwable t) { logd(Log.WARN, TAG, "permission check failed for " + pkg + ": " + t); return false; }
+        catch (Throwable t) { log(Log.WARN, TAG, "permission check failed for " + pkg + ": " + t); return false; }
     }
 
     private void logUnlocked(String pkg, String gate) {
-        if (pkg != null && loggedPackages.add(pkg + "@" + gate)) logd(Log.INFO, TAG, "unlock " + gate + " for " + pkg);
+        if (pkg != null && loggedPackages.add(pkg + "@" + gate)) log(Log.INFO, TAG, "unlock " + gate + " for " + pkg);
     }
 }
