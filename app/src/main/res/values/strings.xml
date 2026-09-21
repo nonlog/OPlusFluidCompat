@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">OPlus Fluid Compat</string>
+    <string name="module_description">Unlock OPlus FlashViews / Live Alerts compatibility checks for apps that already integrate the OPlus SDK.</string>
+</resources>
