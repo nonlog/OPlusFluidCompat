@@ -48,14 +48,33 @@ public class AmapCompatibilityPolicyTest {
                 "component=com.autonavi.minimap/com.autonavi.minimap.immersenavi.AMapImmerseNaviService"));
     }
 
-    @Test public void requiresActualNativeInitialization() {
-        assertTrue(AmapCompatibilityPolicy.canPublishNative(99910003, true, 105));
-        assertFalse(AmapCompatibilityPolicy.canPublishNative(99910003, false, 105));
-        assertFalse(AmapCompatibilityPolicy.canPublishNative(99910003, true, 0));
+    @Test public void pluginMappedIdsAreRecognised() {
+        // 99910001 is the observed AMap navigation prebuiltId advertised by the plugin.
+        assertTrue(AmapCompatibilityPolicy.isPrebuiltLiveAlertId(99910001));
+        assertTrue(AmapCompatibilityPolicy.isPrebuiltLiveAlertId(
+                AmapCompatibilityPolicy.NOTIFICATION_ID_BASE + 1));
     }
 
-    @Test public void drivingMustNeverBeRelabeledAsNativeMap() {
-        assertFalse(AmapCompatibilityPolicy.canPublishNative(99910001, true, 105));
-        assertFalse(AmapCompatibilityPolicy.canPublishNative(99910001, false, 0));
+    @Test public void unrelatedNotificationIdsAreRejected() {
+        for (int id : new int[]{0, -1, 1001, 99910000,
+                AmapCompatibilityPolicy.NOTIFICATION_ID_BASE + AmapCompatibilityPolicy.NOTIFICATION_ID_WINDOW}) {
+            assertFalse("id " + id, AmapCompatibilityPolicy.isPrebuiltLiveAlertId(id));
+        }
+    }
+
+    @Test public void liveAlertMatchNeedsNavigationAndPluginId() {
+        assertTrue(AmapCompatibilityPolicy.isAmapLiveAlertNotification(
+                AmapCompatibilityPolicy.PACKAGE, "navigation",
+                AmapCompatibilityPolicy.ROUTE_CHANNEL, true, false, 99910001));
+        // navigation, but not a plugin-mapped ID
+        assertFalse(AmapCompatibilityPolicy.isAmapLiveAlertNotification(
+                AmapCompatibilityPolicy.PACKAGE, "navigation",
+                AmapCompatibilityPolicy.ROUTE_CHANNEL, true, false, 1001));
+        // plugin ID, but not navigation
+        assertFalse(AmapCompatibilityPolicy.isAmapLiveAlertNotification(
+                AmapCompatibilityPolicy.PACKAGE, "message", "other", true, false, 99910001));
+        assertFalse(AmapCompatibilityPolicy.isAmapLiveAlertNotification(
+                "com.sankuai.meituan", "navigation",
+                AmapCompatibilityPolicy.ROUTE_CHANNEL, true, false, 99910001));
     }
 }
