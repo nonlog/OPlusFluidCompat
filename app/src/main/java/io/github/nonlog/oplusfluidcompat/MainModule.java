@@ -254,10 +254,48 @@ public final class MainModule extends XposedModule {
             });
             nativeLoaders.add(loader);
             log(Log.INFO, TAG, "Seedling 16.001.002 fingerprint and RUS schema verified; hook installed");
+            installNativeInitialMode(loader);
             installSurfaceDiagnostics(loader);
         } catch (Throwable error) {
             examinedLoaders.add(loader);
             log(Log.ERROR, TAG, "native Seedling profile not installed", error);
+        }
+    }
+
+    /** Prefer the native map on initial creation, without editing saved display preferences. */
+    private void installNativeInitialMode(ClassLoader loader) {
+        try {
+            Class<?> infoClass = Class.forName("o5.j", false, loader);
+            Method initialMode = Class.forName("w5.c", false, loader)
+                    .getDeclaredMethod("c", infoClass);
+            if (initialMode.getReturnType() != int.class) throw new NoSuchMethodException("initial mode");
+            Method pkg = infoClass.getMethod("f");
+            Method uri = infoClass.getDeclaredMethod("B");
+            Method defaultEnabled = infoClass.getDeclaredMethod("C");
+            Method supported = infoClass.getDeclaredMethod("y");
+            Method permission = infoClass.getDeclaredMethod("M");
+            hook(initialMode).intercept(chain -> {
+                Object original = chain.proceed();
+                Object info = chain.getArg(0);
+                try {
+                    if (AmapCompatibilityPolicy.PACKAGE.equals(pkg.invoke(info))
+                            && AMAP_LIVE_ALERT_SERVICE_URI.equals(uri.invoke(info))
+                            && Boolean.TRUE.equals(defaultEnabled.invoke(info))
+                            && Boolean.TRUE.equals(supported.invoke(info))
+                            && Boolean.TRUE.equals(permission.invoke(info))) {
+                        logOnce("native-initial-mode", "prefer ready AMap native map on initial card creation; "
+                                + "saved preferences untouched");
+                        // This method returns a request flag, NOT the persisted MODE_IMMERSIVE ordinal (2).
+                        // Verified call site: NotificationController enters immersion when c(info) == 0.
+                        return 0;
+                    }
+                } catch (Throwable error) {
+                    logOnce("native-initial-mode-error", "native initial mode unavailable: " + error.getClass().getName());
+                }
+                return original;
+            });
+        } catch (Throwable error) {
+            log(Log.WARN, TAG, "native initial mode unavailable", error);
         }
     }
 

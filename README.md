@@ -4,7 +4,7 @@ Experimental LSPosed module for native OPlus Live Alerts on OxygenOS. The primar
 target is AMap (`com.autonavi.minimap`), which already exports the native immersive
 navigation renderer. Meituan remains a secondary, unimplemented target.
 
-## Current status: cycling map demonstrated; 0.5.0 verification pending
+## Current status: cycling map demonstrated; 0.5.1 verification pending
 
 0.4.1 has visibly displayed the real AMap cycling map on the OxygenOS lockscreen.
 The host bound AMap's service, passed the display token, and received its native
@@ -19,7 +19,12 @@ unimplemented. Do not interpret the cycling result as support for every mode/app
 0.5.0 adds an app-side native-readiness marker and only restores the native host
 mapping for genuinely initialized navigation. Ordinary driving notifications are
 left on their original path, rather than presented as a misleading generic capsule.
-This change still requires a new CI build and device verification.
+CI21 (0.5.0) passed nine policy tests, installed and correctly detected native
+cycling initialization. Its automatic display was still blocked by the old saved
+list-mode preference. 0.5.1 chooses native immersion at initial card creation only
+for the ready AMap service, retaining the original default-enable, super-power and
+permission checks. It does not edit preference files. This revision awaits CI and
+real-device verification from the saved list-mode baseline.
 
 The installed 0.3.0 baseline was tested with real navigation. It displays an ordinary
 navigation capsule/card, but does **not** bind AMap's immersive map service. That is

@@ -61,3 +61,17 @@ run their original eligibility path without the fallback RUS override. Nine pure
 policy tests cover the allowlist, navigation boundaries and readiness/drive gate.
 
 Both SystemUI and AMap scopes are required. Meituan, JD and Taobao are not implemented.
+
+## 0.5.0 result and 0.5.1 initial-mode correction
+
+CI21 passed and 0.5.0 installed. A new explicitly selected cycling session called
+AMap native init, published the readiness marker, and hit the scoped host mapping.
+The saved display preference was again 0, so no automatic native map appeared.
+
+0.5.1 hooks the fingerprint-verified plugin's initial-mode decision, `w5.c.c(o5.j)`.
+For the exact AMap package and native service URI it requests the native surface
+only when the original default-enable, support/super-power and permission gates
+all pass. It returns the method's request flag 0, not preference ordinal 2. Other
+apps and modes remain original. The native controller still manages subsequent
+show/hide/user actions and may persist its normal display state. The module itself
+does not write XML or authentication databases. New real-device validation is pending.
