@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "OPlusFluidCompat"
-include(":app")
+include(":app", ":policy-tests")
