@@ -48,10 +48,60 @@ data collection or installing any replacement system APK.
 
 ## Validation and rollback
 
-CI and device results must be appended after they actually occur. This document
-does not claim universal ColorOS application support. Real AMap surface display
-and another app with authentic activity/order data remain distinct checks.
+The verified checkpoint below is not universal ColorOS application support.
+Real AMap surface display and another app with authentic activity/order data
+remain distinct checks.
 
 Disable the module and restart affected processes to remove the runtime hooks.
 No firmware partition, property file, authentication database or security grant
 is modified. Private device logs and screenshots are not repository inputs.
+
+
+## CI 27 and device checkpoint
+
+- Code commit: 7423955fdf0ee569aabddddeb3d761b8c4218d9f.
+- Author and committer: Codex <codex@openai.com>.
+- GitHub Actions run: 35727615394 / run number 27 / success.
+- Release: ci-27, OPlusFluidCompat.apk, 2,121,375 bytes.
+- Verified APK SHA-256:
+  bb7f31895d8028498089b6a2dafcfdbe33767c62e19cd5bee8e77b1e6404242f.
+- In-place ADB install succeeded; installed versionName=0.7.1/versionCode=10.
+- Only the relevant UMS and SystemUI processes were restarted. The earlier dump
+  experiment had been restored to EXP before this install/restart, so the new
+  CN result is not residue from the temporary diagnostic command.
+
+Actual module events after restart:
+
+```text
+native FlashBack regional hooks installed: 2/2
+native FlashBack initialization: export=true -> false; flavor=2
+native FlashBack effective region: CN; flavor=2
+native UMS discovery diagnostics installed: 6
+native UMS discovery invoked: queryDomainEnableGroup
+```
+
+The native service dump confirms region=CN, regionMark=CN, flavor=2, support=4,
+FeatureEnable=true. The UMS diagnostic ran in the real main process; no argument
+or business payload was logged. Only queryDomainEnableGroup is proven invoked
+at this checkpoint. Empty discovery is an active implementation gap, not yet a
+proven explanation for every target app's observed behavior.
+
+The attempted fresh AMap UI test encountered the lockscreen and did not produce
+a new real-navigation surface result. Do not relabel the historical CI26 cycling
+screenshot as CI27 acceptance. No Meituan order or fake notification was created.
+A separate manual validation setup enabled Meituan's existing per-app secure
+switch from 0 to 1; the module itself preserves user switches. No screen timeout
+change was applied (the device still reports 60000).
+
+Private evidence remains in the development checkout's logs directory:
+ci27-startup.txt, ci27-lspd.txt and ci27-flash-config.txt. These contain device
+context and are intentionally not committed. No phone unlock secret is included.
+
+## Next evidence required
+
+Trace genuine client activity through admission, native data delivery and host
+rendering; do not treat a successful identity hook as a successful app test.
+For APIs compiled out of this export UMS, obtain a compatible, OEM-signed China
+implementation for comparison before deciding whether to restore a call path,
+a local provider admission gate or a missing component. Public APK listings alone
+do not establish that a candidate is a China variant or safe to replace in place.

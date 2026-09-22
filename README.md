@@ -5,24 +5,32 @@ is native China ColorOS app compatibility, not notification conversion. AMap's
 native renderer is the first acceptance test; other native clients are included
 in the compatibility investigation, not declared working merely by being scoped.
 
-## Current status: 0.7.0 China identity experiment, functional verification pending
+## Current status: 0.7.1 native China branch verified; all-app compatibility unresolved
 
-0.7.0 adds a process-local China identity layer for the native Live Alert hosts
-and opted-in clients whose manifests declare OPlus integration. It masks three
-observed region properties, five export/OOS feature flags, and the UMS `IS_EXPORT`
-metadata seen by native SDK callers. It does not alter the ROM, model, fingerprint,
-device identifiers, system-server, caller UID, package signatures, or permissions.
-Within SystemUI, identity changes are restricted to native Live Alert call stacks.
+0.7.1 was built by GitHub Actions run 27, installed as versionCode 10, and checked
+on the rooted development device. The native FlashBack initializer now receives
+export=false. Its service dump reports region=CN and regionMark=CN, while the
+original device-family flavor=2 and support mask=4 remain unchanged.
 
-**This is not yet an all-app unlock.** The inspected UMS 17.17.0 export binary has
-compiled-in export branches and an export-only region tier resolver. `CN` falls
-back to `exportIn`; changing properties cannot by itself supply missing native
-service definitions. The module logs actual identity hits and native provider
-inventory so this remaining gate can be distinguished from a hook-loading failure.
-See [China identity findings and validation](docs/CHINA_IDENTITY.md).
+This fixes a measured defect in 0.7.0: its property hooks reported CN but the
+native engine still retained region=EXP. The new hooks run before the native
+asynchronous initializer, not just after a displayed region string is computed.
 
-The existing AMap renderer mapping is retained unchanged. Its earlier cycling
-result does not establish driving support or compatibility with other apps.
+**This is not an all-app unlock.** A real UMS queryDomainEnableGroup invocation
+was observed in the export binary, whose implementation returns an empty list.
+That establishes an active missing discovery API, not that it is the sole cause
+of every client's failure. No cloud service records or order data were invented.
+
+The existing AMap native renderer mapping is unchanged. Earlier cycling surface
+screenshots are historical evidence, not a new 0.7.1 navigation acceptance test.
+Driving, Meituan order rendering and universal native-client compatibility remain
+unverified. The attempted fresh phone UI test did not produce a navigation result.
+
+The process-local identity layer continues to cover opted-in clients with genuine
+OPlus manifest declarations. It does not alter system-server, ROM partitions,
+model/fingerprint, package signatures, caller identity or security permissions.
+See [native region branch and CI/device evidence](docs/NATIVE_REGION_BRANCH.md)
+and [the earlier identity investigation](docs/CHINA_IDENTITY.md).
 
 ## Historical AMap implementation through 0.6.0
 
@@ -74,7 +82,7 @@ installed hooks are not proof that native immersive navigation works.
 Development device: OnePlus CPH2573, Android 16,
 OxygenOS `CPH2573_16.0.10.501(EX01)`.
 
-The recommended 0.7.0 scopes include SystemUI, Pantanal UMS, SceneService,
+The recommended 0.7.x scopes include SystemUI, Pantanal UMS, SceneService,
 AssistantScreen and AmbientLiveAlert, plus the listed native client apps.
 Recommendations do not automatically change LSPosed's enabled scopes. Additional
 client apps may be selected, but the identity layer activates only when an OPlus
