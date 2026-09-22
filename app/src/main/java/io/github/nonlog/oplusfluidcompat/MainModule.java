@@ -47,7 +47,12 @@ public final class MainModule extends XposedModule {
 
     @Override
     public void onPackageReady(PackageReadyParam param) {
+        if (ChinaCompatibilityPolicy.UMS.equals(param.getPackageName())) {
+            new NativeRuntimeHooks(this).installUmsDiagnostics(param.getClassLoader());
+            return;
+        }
         if (!SYSTEM_UI.equals(param.getPackageName())) return;
+        new NativeRuntimeHooks(this).installSystemUi(param.getClassLoader());
         installSystemUiHooks(param.getClassLoader());
     }
 

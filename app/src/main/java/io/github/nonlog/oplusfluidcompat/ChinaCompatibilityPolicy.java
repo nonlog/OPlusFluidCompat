@@ -53,6 +53,16 @@ public final class ChinaCompatibilityPolicy {
         return UMS.equals(packageName);
     }
 
+    public static boolean supportsFlashbackProfile(int sdk, String build) {
+        return sdk == 36 && "CPH2573_16.0.10.501(EX01)".equals(build);
+    }
+
+    public static boolean isNativeDiscoveryMethod(String method) {
+        return "findSeedlingService".equals(method) || "queryDomainEnable".equals(method)
+                || "queryDomainEnableGroup".equals(method) || "queryDomainEnableV3".equals(method)
+                || "queryServicePkgMeta".equals(method) || "downloadUpkFile".equals(method);
+    }
+
     public static boolean isNativeFrame(String className) {
         if (className == null) return false;
         return className.startsWith("com.pantanal.")
