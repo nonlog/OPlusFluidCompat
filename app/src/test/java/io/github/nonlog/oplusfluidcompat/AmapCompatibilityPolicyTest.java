@@ -47,4 +47,15 @@ public class AmapCompatibilityPolicyTest {
         assertTrue(AmapCompatibilityPolicy.SERVICE_URI.contains(
                 "component=com.autonavi.minimap/com.autonavi.minimap.immersenavi.AMapImmerseNaviService"));
     }
+
+    @Test public void requiresActualNativeInitialization() {
+        assertTrue(AmapCompatibilityPolicy.canPublishNative(99910003, true, 105));
+        assertFalse(AmapCompatibilityPolicy.canPublishNative(99910003, false, 105));
+        assertFalse(AmapCompatibilityPolicy.canPublishNative(99910003, true, 0));
+    }
+
+    @Test public void drivingMustNeverBeRelabeledAsNativeMap() {
+        assertFalse(AmapCompatibilityPolicy.canPublishNative(99910001, true, 105));
+        assertFalse(AmapCompatibilityPolicy.canPublishNative(99910001, false, 0));
+    }
 }

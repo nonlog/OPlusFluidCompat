@@ -5,6 +5,7 @@ final class AmapCompatibilityPolicy {
     static final String PACKAGE = "com.autonavi.minimap";
     static final String RUS_ID = "laid_" + PACKAGE;
     static final String ROUTE_CHANNEL = "ROUTE_CHANNEL_ID";
+    static final String READY_KEY = "io.github.nonlog.oplusfluidcompat.NATIVE_RENDERER_READY";
     static final String SERVICE_URI =
             "intent:#Intent;action=com.amap.minimap.immersenavi.AMapImmerseNaviService;"
                     + "component=com.autonavi.minimap/com.autonavi.minimap.immersenavi.AMapImmerseNaviService;end";
@@ -20,6 +21,11 @@ final class AmapCompatibilityPolicy {
 
     static boolean isTargetRusId(String id) {
         return id != null && (RUS_ID.equals(id) || id.startsWith(RUS_ID + "_"));
+    }
+
+    static boolean canPublishNative(int notificationId, boolean hasContext, int configLength) {
+        // The tested AMap build uses a separate driving path; never relabel it as a map surface.
+        return notificationId != 99910001 && hasContext && configLength > 0;
     }
 
     private AmapCompatibilityPolicy() {}

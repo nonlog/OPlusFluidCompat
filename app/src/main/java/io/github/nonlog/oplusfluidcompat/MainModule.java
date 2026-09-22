@@ -1,9 +1,13 @@
 package io.github.nonlog.oplusfluidcompat;
 
 import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.Service;
 import android.content.Context;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Message;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
@@ -34,6 +38,7 @@ public final class MainModule extends XposedModule {
     private static final String KEY_IMMERSIVE_CARD_TYPE = "immersiveCardType";
     private final Set<ClassLoader> examinedLoaders = ConcurrentHashMap.newKeySet();
     private final Set<ClassLoader> nativeLoaders = ConcurrentHashMap.newKeySet();
+    private final ThreadLocal<Boolean> suppressCompatibilityRus = ThreadLocal.withInitial(() -> false);
 
     private static final Set<String> loggedEvents =
             Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -46,6 +51,7 @@ public final class MainModule extends XposedModule {
     @Override
     public void onPackageReady(PackageReadyParam param) {
         if (AmapCompatibilityPolicy.PACKAGE.equals(param.getPackageName())) {
+            installAmapNativePublisher(param.getClassLoader());
             installAmapDiagnostics(param.getClassLoader());
             return;
         }
@@ -90,13 +96,23 @@ public final class MainModule extends XposedModule {
             method.setAccessible(true);
             hook(method).intercept(chain -> {
                 StatusBarNotification sbn = getStatusBarNotification(chain.getArg(0));
-                if (isAmapNavigation(sbn)) {
+                if (isReadyNativeNavigation(sbn)) {
                     Object plugin = pluginField.get(chain.getThisObject());
                     ClassLoader loader = plugin == null ? null : plugin.getClass().getClassLoader();
                     installSeedlingHooks(loader);
                     if (loader == null || !nativeLoaders.contains(loader)) return chain.proceed();
                     logOnce("amap-eligibility", "allow native Live Alert eligibility for AMap navigation");
                     return true;
+                }
+                if (sbn != null && AmapCompatibilityPolicy.PACKAGE.equals(sbn.getPackageName())) {
+                    // Do not let our fallback RUS profile promote unrelated or uninitialized notifications.
+                    boolean previous = suppressCompatibilityRus.get();
+                    suppressCompatibilityRus.set(true);
+                    try {
+                        return chain.proceed();
+                    } finally {
+                        suppressCompatibilityRus.set(previous);
+                    }
                 }
                 return chain.proceed();
             });
@@ -128,7 +144,7 @@ public final class MainModule extends XposedModule {
             method.setAccessible(true);
             hook(method).intercept(chain -> {
                 StatusBarNotification sbn = getStatusBarNotification(chain.getArg(0));
-                if (!nativeLoaders.isEmpty() && isAmapNavigation(sbn)) {
+                if (!nativeLoaders.isEmpty() && isReadyNativeNavigation(sbn)) {
                     Notification notification = sbn.getNotification();
                     Bundle extras = notification != null ? notification.extras : null;
                     if (extras != null) {
@@ -207,7 +223,8 @@ public final class MainModule extends XposedModule {
             Object[] cache = new Object[2]; // last immutable template and its package-specific copy
             hook(lookup).intercept(chain -> {
                 Object existing = chain.proceed();
-                if (existing != null || !AmapCompatibilityPolicy.isTargetRusId((String) chain.getArg(0))) {
+                if (existing != null || suppressCompatibilityRus.get()
+                        || !AmapCompatibilityPolicy.isTargetRusId((String) chain.getArg(0))) {
                     return existing;
                 }
                 try {
@@ -280,6 +297,103 @@ public final class MainModule extends XposedModule {
             });
         } catch (Throwable error) {
             log(Log.WARN, TAG, "surface diagnostics unavailable (native behavior unchanged)", error);
+        }
+    }
+
+    /** Tag only notifications backed by AMap's initialized native renderer. */
+    private void installAmapNativePublisher(ClassLoader loader) {
+        try {
+            Context application = (Context) Class.forName("android.app.ActivityThread")
+                    .getDeclaredMethod("currentApplication").invoke(null);
+            // PackageReady can precede Application.attach; read it lazily in notification callbacks.
+            Class<?> manager = Class.forName("p7", false, loader);
+            Method instance = manager.getDeclaredMethod("getInstance");
+            Field context = manager.getDeclaredField("a");
+            Field config = manager.getDeclaredField("f");
+            context.setAccessible(true);
+            config.setAccessible(true);
+            if (config.getType() != String.class || instance.getReturnType() != manager) {
+                throw new IllegalStateException("Unknown AMap renderer schema");
+            }
+            for (Method method : NotificationManager.class.getDeclaredMethods()) {
+                if (!method.getName().equals("notify")) continue;
+                Class<?>[] args = method.getParameterTypes();
+                int idIndex;
+                if (args.length == 2 && args[0] == int.class && args[1] == Notification.class) {
+                    idIndex = 0;
+                } else if (args.length == 3 && args[0] == String.class
+                        && args[1] == int.class && args[2] == Notification.class) {
+                    idIndex = 1;
+                } else continue;
+                final int index = idIndex;
+                hook(method).intercept(chain -> {
+                    markNativeReady((Integer) chain.getArg(index),
+                            (Notification) chain.getArg(index + 1), instance, context, config);
+                    return chain.proceed();
+                });
+            }
+            for (Method method : Service.class.getDeclaredMethods()) {
+                if (!method.getName().equals("startForeground")) continue;
+                Class<?>[] args = method.getParameterTypes();
+                if (args.length < 2 || args[0] != int.class || args[1] != Notification.class) continue;
+                hook(method).intercept(chain -> {
+                    markNativeReady((Integer) chain.getArg(0), (Notification) chain.getArg(1),
+                            instance, context, config);
+                    return chain.proceed();
+                });
+            }
+            Class<?> module = Class.forName(
+                    "com.autonavi.minimap.immersenavi.module.NativesModuleImmerseNavi", false, loader);
+            hook(module.getDeclaredMethod("init", String.class)).intercept(chain -> {
+                Object result = chain.proceed();
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    try {
+                        Context app = application != null ? application : (Context) Class.forName("android.app.ActivityThread")
+                                .getDeclaredMethod("currentApplication").invoke(null);
+                        if (app == null) return;
+                        NotificationManager notifications = app.getSystemService(NotificationManager.class);
+                        for (StatusBarNotification active : notifications.getActiveNotifications()) {
+                            if (!isAmapNavigation(active)) continue;
+                            Notification copy = active.getNotification().clone();
+                            boolean before = copy.extras != null
+                                    && copy.extras.getBoolean(AmapCompatibilityPolicy.READY_KEY, false);
+                            markNativeReady(active.getId(), copy, instance, context, config);
+                            boolean after = copy.extras != null
+                                    && copy.extras.getBoolean(AmapCompatibilityPolicy.READY_KEY, false);
+                            if (!before && after) notifications.notify(active.getTag(), active.getId(), copy);
+                        }
+                    } catch (Throwable error) {
+                        logOnce("native-refresh-failed", "native notification refresh unavailable: " + error.getClass().getName());
+                    }
+                });
+                return result;
+            });
+            log(Log.INFO, TAG, "AMap native-ready publisher installed; ordinary driving notifications unchanged");
+        } catch (Throwable error) {
+            log(Log.WARN, TAG, "AMap native-ready publisher unavailable; compatibility fails closed", error);
+        }
+    }
+
+    private void markNativeReady(int notificationId, Notification notification, Method instance,
+                                 Field context, Field config) {
+        if (notification == null || !AmapCompatibilityPolicy.isNavigation(AmapCompatibilityPolicy.PACKAGE,
+                notification.category, notification.getChannelId(), true,
+                (notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0)) return;
+        try {
+            Object state = instance.invoke(null);
+            String init = (String) config.get(state);
+            boolean ready = AmapCompatibilityPolicy.canPublishNative(notificationId,
+                    context.get(state) != null, init == null ? 0 : init.length());
+            if (notification.extras == null) notification.extras = new Bundle();
+            if (ready) {
+                notification.extras.putBoolean(AmapCompatibilityPolicy.READY_KEY, true);
+                logOnce("native-ready-published", "AMap navigation backed by its initialized native renderer");
+            } else {
+                notification.extras.remove(AmapCompatibilityPolicy.READY_KEY);
+            }
+        } catch (Throwable error) {
+            if (notification.extras != null) notification.extras.remove(AmapCompatibilityPolicy.READY_KEY);
+            logOnce("native-ready-failed", "native readiness unavailable: " + error.getClass().getName());
         }
     }
 
@@ -393,6 +507,11 @@ public final class MainModule extends XposedModule {
                 notification.getChannelId(),
                 (notification.flags & Notification.FLAG_FOREGROUND_SERVICE) != 0,
                 (notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0);
+    }
+
+    private static boolean isReadyNativeNavigation(StatusBarNotification sbn) {
+        return isAmapNavigation(sbn) && sbn.getNotification().extras != null
+                && sbn.getNotification().extras.getBoolean(AmapCompatibilityPolicy.READY_KEY, false);
     }
 
     private void logOnce(String key, String message) {
