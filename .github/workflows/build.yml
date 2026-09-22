@@ -38,8 +38,16 @@ jobs:
         with:
           gradle-version: 9.7.1
 
-      - name: Build release APK
-        run: gradle --no-daemon assembleRelease
+      - name: Test policy and build release APK
+        run: gradle --no-daemon testReleaseUnitTest assembleRelease
+
+      - name: Upload unit-test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: app/build/test-results/testReleaseUnitTest/*.xml
+          if-no-files-found: warn
 
       - name: Collect APK
         run: |

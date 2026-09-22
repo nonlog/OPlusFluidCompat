@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.nonlog.oplusfluidcompat"
         minSdk = 35
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     buildTypes {
@@ -37,4 +37,5 @@ android {
 
 dependencies {
     compileOnly(libs.libxposed.api)
+    testImplementation("junit:junit:4.13.2")
 }
