@@ -9,6 +9,7 @@ import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
 import java.io.FileInputStream;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -44,6 +45,10 @@ public final class MainModule extends XposedModule {
 
     @Override
     public void onPackageReady(PackageReadyParam param) {
+        if (AmapCompatibilityPolicy.PACKAGE.equals(param.getPackageName())) {
+            installAmapDiagnostics(param.getClassLoader());
+            return;
+        }
         if (!SYSTEM_UI.equals(param.getPackageName())) return;
         installSystemUiHooks(param.getClassLoader());
     }
@@ -250,23 +255,102 @@ public final class MainModule extends XposedModule {
                 }
                 return chain.proceed();
             });
-            Method receive = Class.forName("z5.b", false, loader)
-                    .getDeclaredMethod("handleMessage", Message.class);
+            Class<?> receiverClass = Class.forName("z5.b", false, loader);
+            Field hostReference = receiverClass.getDeclaredField("b");
+            hostReference.setAccessible(true);
+            Field serviceUri = Class.forName("z5.h", false, loader).getDeclaredField("c");
+            serviceUri.setAccessible(true);
+            Method receive = receiverClass.getDeclaredMethod("handleMessage", Message.class);
             hook(receive).intercept(chain -> {
                 Message message = (Message) chain.getArg(0);
                 if (message != null && message.what == 21) {
                     Bundle data = message.getData();
-                    Bundle extra = data.getBundle("extra");
-                    Bundle card = extra == null ? null : extra.getBundle("livealert.immersive.card");
-                    if (card != null && isAmapCardKey(card.getString("cardKey"))) {
-                        logOnce("amap-surface-reply", "AMap returned native surface (message 21), "
-                                + "hasSurfacePackage=" + data.containsKey("SurfacePackage"));
+                    try {
+                        Object reference = hostReference.get(chain.getThisObject());
+                        Object host = reference instanceof WeakReference ? ((WeakReference<?>) reference).get() : null;
+                        if (host != null && AMAP_LIVE_ALERT_SERVICE_URI.equals(serviceUri.get(host))) {
+                            logOnce("amap-surface-reply", "AMap returned native surface (message 21), "
+                                    + "hasSurfacePackage=" + data.containsKey("SurfacePackage"));
+                        }
+                    } catch (Throwable error) {
+                        logOnce("surface-diagnostic-error", "surface diagnostic: " + error.getClass().getName());
                     }
                 }
                 return chain.proceed();
             });
         } catch (Throwable error) {
             log(Log.WARN, TAG, "surface diagnostics unavailable (native behavior unchanged)", error);
+        }
+    }
+
+    /** Read-only probes of the native renderer; never substitute config, routes or surfaces. */
+    private void installAmapDiagnostics(ClassLoader loader) {
+        try {
+            String serviceName = "com.autonavi.minimap.immersenavi.AMapImmerseNaviService";
+            Class<?> manager = Class.forName("p7", false, loader);
+            Method instance = manager.getDeclaredMethod("getInstance");
+            Field ajxContext = manager.getDeclaredField("a");
+            Field initConfig = manager.getDeclaredField("f");
+            ajxContext.setAccessible(true);
+            initConfig.setAccessible(true);
+            Class<?> service = Class.forName(serviceName, false, loader);
+            Class<?> bindContext = Class.forName("ej3", false, loader);
+            Method createMap = service.getDeclaredMethod("a", int.class, int.class, bindContext);
+            hook(createMap).intercept(chain -> {
+                try {
+                    Object state = instance.invoke(null);
+                    Object config = initConfig.get(state);
+                    logOnce("amap-map-init-state", "AMap native renderer initialization: hasAjxContext="
+                            + (ajxContext.get(state) != null) + ", configLength="
+                            + (config instanceof String ? ((String) config).length() : -1));
+                } catch (Throwable error) {
+                    logOnce("amap-state-probe-error", "AMap state probe: " + error.getClass().getName());
+                }
+                Object result = chain.proceed();
+                logOnce("amap-map-init-result-" + (result != null),
+                        "AMap native renderer createMap returnedView=" + (result != null));
+                return result;
+            });
+            Class<?> receiver = Class.forName(serviceName + "$b", false, loader);
+            hook(receiver.getDeclaredMethod("handleMessage", Message.class)).intercept(chain -> {
+                Message message = (Message) chain.getArg(0);
+                if (message != null && message.what == 11) {
+                    Bundle data = message.getData();
+                    Bundle extra = data.getBundle("extra");
+                    Bundle display = extra == null ? null : extra.getBundle("livealert.immersive.display");
+                    logOnce("amap-message-11", "AMap received host token: tokenPresent="
+                            + (data.getBinder("hostToken") != null) + ", replyPresent=" + (message.replyTo != null)
+                            + ", width=" + (display == null ? -1 : display.getInt("width"))
+                            + ", height=" + (display == null ? -1 : display.getInt("height")));
+                }
+                return chain.proceed();
+            });
+            Class<?> module = Class.forName(
+                    "com.autonavi.minimap.immersenavi.module.NativesModuleImmerseNavi", false, loader);
+            hook(module.getDeclaredMethod("init", String.class)).intercept(chain -> {
+                String config = (String) chain.getArg(0);
+                logOnce("amap-ajx-init", "AMap AJX called native immersive init, configLength="
+                        + (config == null ? -1 : config.length()));
+                return chain.proceed();
+            });
+            Class<?> appLog = Class.forName("ef0", false, loader);
+            hook(appLog.getDeclaredMethod("g", String.class, String.class)).intercept(chain -> {
+                String source = (String) chain.getArg(0);
+                String message = (String) chain.getArg(1);
+                if ("AMapImmerseNaviService".equals(source) && message != null) {
+                    String category = message.startsWith("initMapView: empty initConfig:") ? "missing-ajx-init"
+                            : message.startsWith("handleBindHostToken Exception:") ? "host-token-exception"
+                            : message.startsWith("initMapView:") ? "invalid-init-config"
+                            : message.startsWith("onMapCreateError") ? "map-create-error"
+                            : message.equals("handleBindHostToken: map content view is null") ? "null-map-view"
+                            : null;
+                    if (category != null) logOnce("amap-render-error-" + category, "AMap native renderer error=" + category);
+                }
+                return chain.proceed();
+            });
+            log(Log.INFO, TAG, "AMap read-only renderer diagnostics installed");
+        } catch (Throwable error) {
+            log(Log.WARN, TAG, "AMap renderer diagnostics unavailable", error);
         }
     }
 

@@ -4,7 +4,12 @@ Experimental LSPosed module for native OPlus Live Alerts on OxygenOS. The primar
 target is AMap (`com.autonavi.minimap`), which already exports the native immersive
 navigation renderer. Meituan remains a secondary, unimplemented target.
 
-## Current status: 0.4.0 awaits real-device validation
+## Current status: 0.4.1 renderer diagnostics; native map not yet working
+
+0.4.0 has now been installed and tested: the native service binding and host-token
+request succeed, but the map surface is absent. See [device results](docs/V04_DEVICE_RESULT.md).
+0.4.1 adds read-only renderer diagnostics. Enable **SystemUI and AMap** scopes for
+this diagnostic build; AMap is not an additional compatibility bypass.
 
 The installed 0.3.0 baseline was tested with real navigation. It displays an ordinary
 navigation capsule/card, but does **not** bind AMap's immersive map service. That is
@@ -24,9 +29,10 @@ installed hooks are not proof that native immersive navigation works.
 Development device: OnePlus CPH2573, Android 16,
 OxygenOS `CPH2573_16.0.10.501(EX01)`.
 
-Only LSPosed scope `com.android.systemui` is required. The embedded Seedling plugin
+The compatibility implementation uses LSPosed scope `com.android.systemui`. The embedded Seedling plugin
 runs inside SystemUI; the module obtains its real classloader from the plugin
-instance. Do not add Instant Platform, UMS or AMap scopes for this implementation.
+instance. The 0.4.1 probes also require `com.autonavi.minimap`. Do not add Instant
+Platform or UMS scopes for this implementation.
 
 The obfuscated profile is pinned to SystemUIPlugin **16.001.002 / 16001002**, SHA-256
 `d7c0a5dc11f40e7c89b2687a5a89a7db1fa2365ddb3fb3110214b2e7f19862db`.
