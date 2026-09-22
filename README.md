@@ -1,10 +1,30 @@
 # OPlusFluidCompat
 
-Experimental LSPosed module for native OPlus Live Alerts on OxygenOS. The primary
-target is AMap (`com.autonavi.minimap`), which already exports the native immersive
-navigation renderer. Meituan remains a secondary, unimplemented target.
+Experimental LSPosed module for native OPlus Live Alerts on OxygenOS. The target
+is native China ColorOS app compatibility, not notification conversion. AMap's
+native renderer is the first acceptance test; other native clients are included
+in the compatibility investigation, not declared working merely by being scoped.
 
-## Current status: SystemUI-only again; 0.6.0 verification pending
+## Current status: 0.7.0 China identity experiment, functional verification pending
+
+0.7.0 adds a process-local China identity layer for the native Live Alert hosts
+and opted-in clients whose manifests declare OPlus integration. It masks three
+observed region properties, five export/OOS feature flags, and the UMS `IS_EXPORT`
+metadata seen by native SDK callers. It does not alter the ROM, model, fingerprint,
+device identifiers, system-server, caller UID, package signatures, or permissions.
+Within SystemUI, identity changes are restricted to native Live Alert call stacks.
+
+**This is not yet an all-app unlock.** The inspected UMS 17.17.0 export binary has
+compiled-in export branches and an export-only region tier resolver. `CN` falls
+back to `exportIn`; changing properties cannot by itself supply missing native
+service definitions. The module logs actual identity hits and native provider
+inventory so this remaining gate can be distinguished from a hook-loading failure.
+See [China identity findings and validation](docs/CHINA_IDENTITY.md).
+
+The existing AMap renderer mapping is retained unchanged. Its earlier cycling
+result does not establish driving support or compatibility with other apps.
+
+## Historical AMap implementation through 0.6.0
 
 0.4.1 has visibly displayed the real AMap cycling map on the OxygenOS lockscreen.
 The host bound AMap's service, passed the display token, and received its native
@@ -54,10 +74,13 @@ installed hooks are not proof that native immersive navigation works.
 Development device: OnePlus CPH2573, Android 16,
 OxygenOS `CPH2573_16.0.10.501(EX01)`.
 
-The compatibility implementation uses LSPosed scope `com.android.systemui`. The embedded Seedling plugin
-runs inside SystemUI; the module obtains its real classloader from the plugin
-instance. No hook is installed inside `com.autonavi.minimap`; do not add that scope,
-Instant Platform or UMS scopes for this implementation.
+The recommended 0.7.0 scopes include SystemUI, Pantanal UMS, SceneService,
+AssistantScreen and AmbientLiveAlert, plus the listed native client apps.
+Recommendations do not automatically change LSPosed's enabled scopes. Additional
+client apps may be selected, but the identity layer activates only when an OPlus
+integration declaration is present. There is no Instant Platform or system-server
+hook. The embedded Seedling plugin still runs inside SystemUI; its original
+classloader and pinned profile are used for the separate AMap renderer mapping.
 
 The obfuscated profile is pinned to SystemUIPlugin **16.001.002 / 16001002**, SHA-256
 `d7c0a5dc11f40e7c89b2687a5a89a7db1fa2365ddb3fb3110214b2e7f19862db`.
@@ -65,8 +88,9 @@ Unknown plugin APKs fail closed. This is not a cross-ROM compatibility claim.
 
 ## Build, install and verification
 
-APKs are built exclusively by GitHub Actions, including ten policy unit tests.
-Install the CI-produced APK, enable the SystemUI scope, and restart SystemUI.
+APKs are built exclusively by GitHub Actions, including policy unit tests.
+Install the CI-produced APK, enable the relevant recommended scopes, and restart
+only those target processes (or reboot after saving other work).
 Start real AMap navigation and inspect the lockscreen immersive map as well as the
 status-bar UI. Capture host service binding and the returned native SurfacePackage.
 
@@ -78,8 +102,10 @@ older evidence but its former impossibility conclusion is not authoritative.
 
 ## Rollback
 
-Disable the module and restart SystemUI (and AMap, to stop its renderer service). Module
-code does not edit system APKs, UMS/OCS data, app accounts or permanent permissions.
+Disable the module and restart all processes in which it was enabled (or reboot).
+Module code does not edit system APKs, UMS/OCS databases, app accounts or permanent
+permissions. Native components can maintain their own caches; disabling hooks does
+not promise to undo data written by the components themselves.
 The diagnostic test changed only AMap's saved SystemUI display mode, with its original
 value recorded separately; that display preference is not automatically reverted by
 disabling the module.

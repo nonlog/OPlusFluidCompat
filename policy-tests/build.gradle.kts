@@ -12,6 +12,7 @@ sourceSets {
     named("main") {
         java.setSrcDirs(listOf("../app/src/main/java"))
         java.include("io/github/nonlog/oplusfluidcompat/AmapCompatibilityPolicy.java")
+        java.include("io/github/nonlog/oplusfluidcompat/ChinaCompatibilityPolicy.java")
     }
     named("test") {
         java.setSrcDirs(listOf("../app/src/test/java"))

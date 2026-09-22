@@ -42,6 +42,7 @@ public final class MainModule extends XposedModule {
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
         log(Log.INFO, TAG, "loaded in " + param.getProcessName());
+        new ChinaIdentityHooks(this, param.getProcessName()).install();
     }
 
     @Override
