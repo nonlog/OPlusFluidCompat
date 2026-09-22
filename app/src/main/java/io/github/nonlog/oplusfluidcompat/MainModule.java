@@ -202,7 +202,7 @@ public final class MainModule extends XposedModule {
             Object[] cache = new Object[2]; // last immutable template and its package-specific copy
             hook(lookup).intercept(chain -> {
                 Object existing = chain.proceed();
-                if (existing != null || !AmapCompatibilityPolicy.isTargetRusId(chain.getArg(0))) {
+                if (existing != null || !AmapCompatibilityPolicy.isTargetRusId((String) chain.getArg(0))) {
                     return existing;
                 }
                 try {
@@ -244,7 +244,7 @@ public final class MainModule extends XposedModule {
             Method bind = Class.forName("z5.h", false, loader)
                     .getDeclaredMethod("c", String.class, Bundle.class, IBinder.class);
             hook(bind).intercept(chain -> {
-                String key = chain.getArg(0);
+                String key = (String) chain.getArg(0);
                 if (isAmapCardKey(key)) {
                     logOnce("amap-host-token", "native IntentMessenger sends AMap host token (message 11)");
                 }
@@ -253,7 +253,7 @@ public final class MainModule extends XposedModule {
             Method receive = Class.forName("z5.b", false, loader)
                     .getDeclaredMethod("handleMessage", Message.class);
             hook(receive).intercept(chain -> {
-                Message message = chain.getArg(0);
+                Message message = (Message) chain.getArg(0);
                 if (message != null && message.what == 21) {
                     Bundle data = message.getData();
                     Bundle extra = data.getBundle("extra");
