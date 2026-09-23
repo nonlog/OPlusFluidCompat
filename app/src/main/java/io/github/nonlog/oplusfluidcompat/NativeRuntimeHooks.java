@@ -162,14 +162,16 @@ final class NativeRuntimeHooks {
         try {
             Class<?> scanner = Class.forName("com.pantanal.server.content.scan.Scanner", false, loader);
             Method queryAccessPackages = scanner.getDeclaredMethod("h", String.class);
-            Field applicationField = scanner.getDeclaredField("f19899b");
+            // Use the real DEX names. JADX displays these as f19899b/f22749a only to
+            // disambiguate short obfuscated identifiers in decompiled Java source.
+            Field applicationField = scanner.getDeclaredField("b");
             applicationField.setAccessible(true);
 
             Class<?> packageEntry = Class.forName("ff.a", false, loader);
             Constructor<?> packageEntryConstructor = packageEntry.getDeclaredConstructor(
                     String.class, List.class, long.class, long.class, String.class, ResolveInfo.class);
             packageEntryConstructor.setAccessible(true);
-            Field packageNameField = packageEntry.getDeclaredField("f22749a");
+            Field packageNameField = packageEntry.getDeclaredField("a");
             packageNameField.setAccessible(true);
 
             Class<?> packageUtils = Class.forName("com.pantanal.server.common.utils.k", false, loader);

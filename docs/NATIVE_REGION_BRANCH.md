@@ -83,6 +83,12 @@ though the native service already exempts SystemUI. 0.8.1 excludes system and up
 system applications from the compatibility predicate, so the bypass remains a
 third-party native-client path.
 
+The same runtime log also showed that the UMS scanner hook initially referenced
+JADX's decompiler aliases (`f19899b`, `f22749a`) rather than the underlying DEX field
+names. Targeted `dexdump` inspection of UMS 17.17.0 confirmed `Scanner.b` is the static
+Application field and `ff.a.a` is the packageName field. 0.8.2 uses those verified DEX
+identifiers; the constructor signature itself already matched the bytecode.
+
 ## Validation and rollback
 
 The verified checkpoint below is not universal ColorOS application support.

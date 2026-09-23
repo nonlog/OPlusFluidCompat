@@ -5,7 +5,7 @@ is native China ColorOS app compatibility, not notification conversion. AMap's
 native renderer is the first acceptance test; other native clients are included
 in the compatibility investigation, not declared working merely by being scoped.
 
-## Current status: 0.8.1 native registration compatibility candidate
+## Current status: 0.8.2 native registration compatibility candidate
 
 0.8.x extends the verified 0.7.1 China-region work into two native registration
 gates found on the inspected ROM. It is intentionally not described as universal
@@ -15,6 +15,12 @@ The first 0.8.0 startup check showed that SystemUI itself also declares the
 FlashViews permission and therefore hit the new support hook unnecessarily. 0.8.1
 restricts that compatibility override to non-system applications; native system
 packages retain their original framework decisions.
+
+The same startup investigation found that the first UMS hook used JADX's display
+aliases for two obfuscated fields instead of their real DEX names. 0.8.2 uses the
+verified DEX fields (`Scanner.b` for the Application and `ff.a.a` for packageName).
+The target remains pinned to UMS 17.17.0, so these names are not assumed stable on
+other builds.
 
 For FlashViews, SystemUI keeps the ROM's native service, renderer, rate limiting and
 existing signer verification. A package already known to the native RUS table may
