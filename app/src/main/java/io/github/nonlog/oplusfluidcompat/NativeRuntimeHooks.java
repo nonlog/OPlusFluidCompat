@@ -34,6 +34,7 @@ final class NativeRuntimeHooks {
     private final XposedModule module;
     private final Set<String> logged = ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<String, Boolean> flashViewsClients = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> seedlingClients = new ConcurrentHashMap<>();
     private volatile Boolean umsRuntimeSupported;
 
     NativeRuntimeHooks(XposedModule module) {
@@ -162,6 +163,7 @@ final class NativeRuntimeHooks {
         try {
             Class<?> scanner = Class.forName("com.pantanal.server.content.scan.Scanner", false, loader);
             Method queryAccessPackages = scanner.getDeclaredMethod("h", String.class);
+            Method filterAuthorizedPackages = scanner.getDeclaredMethod("a", ArrayList.class);
             // Use the real DEX names. JADX displays these as f19899b/f22749a only to
             // disambiguate short obfuscated identifiers in decompiled Java source.
             Field applicationField = scanner.getDeclaredField("b");
@@ -212,6 +214,7 @@ final class NativeRuntimeHooks {
                             descriptorPaths.add(path.trim());
                         }
                     }
+                    if (!isStrongSeedlingClient(application, packageName)) continue;
                     long packageUpdateTime = ((Number) updateTime.invoke(null, application, packageName)).longValue();
                     long packageVersionCode = ((Number) versionCode.invoke(null, application, packageName)).longValue();
                     String packageVersionName = String.valueOf(versionName.invoke(null, application, packageName));
@@ -227,7 +230,48 @@ final class NativeRuntimeHooks {
                 if (added == 0) return original;
                 return augmented;
             });
-            logOnce("ums-registration-installed", "native UMS Seedling registration hook installed");
+
+            module.hook(filterAuthorizedPackages).intercept(chain -> {
+                Object argument = chain.getArg(0);
+                Application application = (Application) applicationField.get(null);
+                if (!(argument instanceof ArrayList<?>) || application == null
+                        || !supportsUmsRuntime(application)) return chain.proceed();
+
+                ArrayList<?> mutable = (ArrayList<?>) argument;
+                ArrayList<Object> beforeOcs = new ArrayList<>(mutable);
+                Object result = chain.proceed();
+                logOnce("ums-ocs-filter-invoked", "native UMS OCS CARD_CLIENT filter invoked; before="
+                        + beforeOcs.size() + " after=" + mutable.size());
+
+                HashSet<String> remainingPackages = new HashSet<>();
+                for (Object entry : mutable) {
+                    Object packageName = packageNameField.get(entry);
+                    if (packageName instanceof String) remainingPackages.add((String) packageName);
+                }
+
+                int restored = 0;
+                @SuppressWarnings("unchecked")
+                ArrayList<Object> filtered = (ArrayList<Object>) mutable;
+                for (Object entry : beforeOcs) {
+                    Object rawPackageName = packageNameField.get(entry);
+                    if (!(rawPackageName instanceof String)) continue;
+                    String packageName = (String) rawPackageName;
+                    if (remainingPackages.contains(packageName)
+                            || !isStrongSeedlingClient(application, packageName)) continue;
+                    filtered.add(entry);
+                    remainingPackages.add(packageName);
+                    restored++;
+                    logOnce("ums-ocs-register-" + packageName,
+                            "restore native Seedling provider after OCS CARD_CLIENT registration filter: "
+                                    + packageName);
+                }
+                if (restored > 0) {
+                    logOnce("ums-ocs-register-summary",
+                            "native UMS OCS registration compatibility active; restored=" + restored);
+                }
+                return result;
+            });
+            logOnce("ums-registration-installed", "native UMS Seedling registration hooks installed: 2/2");
         } catch (Throwable error) {
             module.log(Log.WARN, TAG, "UMS Seedling registration hook unavailable", error);
         }
@@ -314,6 +358,42 @@ final class NativeRuntimeHooks {
         }
         flashViewsClients.put(packageName, declared);
         return declared;
+    }
+
+    private boolean isStrongSeedlingClient(Context context, String packageName) {
+        if (context == null || packageName == null || packageName.isEmpty()) return false;
+        Boolean cached = seedlingClients.get(packageName);
+        if (cached != null) return cached;
+        boolean eligible = false;
+        try {
+            PackageInfo info = context.getPackageManager().getPackageInfo(
+                    packageName, PackageManager.GET_META_DATA);
+            ApplicationInfo applicationInfo = info.applicationInfo;
+            boolean systemApp = applicationInfo == null || (applicationInfo.flags
+                    & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0;
+            Bundle appMetadata = applicationInfo == null ? null : applicationInfo.metaData;
+            Object auth = appMetadata == null ? null : appMetadata.get(CARD_AUTH_METADATA);
+            boolean hasCardAuth = auth instanceof String && !((String) auth).trim().isEmpty();
+
+            Intent intent = new Intent(SEEDLING_ACTION).setPackage(packageName);
+            List<ResolveInfo> providers = context.getPackageManager()
+                    .queryIntentContentProviders(intent, PackageManager.GET_META_DATA);
+            int descriptorCount = 0;
+            for (ResolveInfo resolved : providers) {
+                ProviderInfo provider = resolved == null ? null : resolved.providerInfo;
+                Bundle metadata = provider == null ? null : provider.metaData;
+                String descriptor = metadata == null ? null : metadata.getString(SEEDLING_METADATA);
+                if (descriptor == null) continue;
+                for (String path : descriptor.split(";")) {
+                    if (ChinaCompatibilityPolicy.isSeedlingDescriptorPath(path)) descriptorCount++;
+                }
+            }
+            eligible = ChinaCompatibilityPolicy.isSeedlingRegistrationCandidate(
+                    packageName, systemApp, hasCardAuth, descriptorCount);
+        } catch (Throwable ignored) {
+        }
+        seedlingClients.put(packageName, eligible);
+        return eligible;
     }
 
     private static Application currentApplication() {

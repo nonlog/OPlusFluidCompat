@@ -39,4 +39,17 @@ public final class NativeRuntimePolicyTest {
         assertFalse(ChinaCompatibilityPolicy.isSeedlingDescriptorPath(".up"));
         assertFalse(ChinaCompatibilityPolicy.isSeedlingDescriptorPath(null));
     }
+
+    @Test public void seedlingRegistrationRequiresStrongThirdPartyNativeEvidence() {
+        assertTrue(ChinaCompatibilityPolicy.isSeedlingRegistrationCandidate(
+                "com.example.delivery", false, true, 1));
+        assertFalse(ChinaCompatibilityPolicy.isSeedlingRegistrationCandidate(
+                "com.example.delivery", true, true, 1));
+        assertFalse(ChinaCompatibilityPolicy.isSeedlingRegistrationCandidate(
+                "com.example.delivery", false, false, 1));
+        assertFalse(ChinaCompatibilityPolicy.isSeedlingRegistrationCandidate(
+                "com.example.delivery", false, true, 0));
+        assertFalse(ChinaCompatibilityPolicy.isSeedlingRegistrationCandidate(
+                "com.oplus.fake", false, true, 1));
+    }
 }

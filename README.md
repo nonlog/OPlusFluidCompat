@@ -5,9 +5,9 @@ is native China ColorOS app compatibility, not notification conversion. AMap's
 native renderer is the first acceptance test; other native clients are included
 in the compatibility investigation, not declared working merely by being scoped.
 
-## Current status: 0.8.2 native registration compatibility candidate
+## Current status: 0.8.3 native registration compatibility candidate
 
-0.8.x extends the verified 0.7.1 China-region work into two native registration
+0.8.x extends the verified 0.7.1 China-region work across three native registration
 gates found on the inspected ROM. It is intentionally not described as universal
 compatibility until the CI artifact is installed and exercised with real client data.
 
@@ -21,6 +21,15 @@ aliases for two obfuscated fields instead of their real DEX names. 0.8.2 uses th
 verified DEX fields (`Scanner.b` for the Application and `ff.a.a` for packageName).
 The target remains pinned to UMS 17.17.0, so these names are not assumed stable on
 other builds.
+
+0.8.3 covers the next UMS gate observed immediately after provider discovery.
+`Scanner.a(ArrayList)` lets the native OCS `CARD_CLIENT` check run first and removes
+packages that are not registered in the OCS capability database. The compatibility
+hook then restores only removed, non-system third-party entries that expose a real
+`SEEDLING_CARD` provider, at least one native `.upk`/`.package` descriptor, and a
+non-empty `com.oplus.ocs.card.AUTH_CODE` declaration. The module does not hook
+`Authentication.checkAuthCode`, does not change OCS results globally, and does not
+write successful authentication records into the OCS cache/database.
 
 For FlashViews, SystemUI keeps the ROM's native service, renderer, rate limiting and
 existing signer verification. A package already known to the native RUS table may
@@ -36,7 +45,8 @@ For Seedling, the OOS UMS scanner already discovers real
 `oplus.seedling.provider` metadata, but drops a provider when its package is absent
 from the local `service_info` repository. 0.8.x restores that provider to the native
 scanner result using its own `.upk`/`.package` descriptors and installed package
-metadata. It does not synthesize service IDs, card contents, order state or network
+metadata, then applies the constrained post-OCS restoration described above. It does
+not synthesize service IDs, card contents, order state or network
 discovery responses. This path is pinned to the inspected UMS 17.17.0 and ROM build.
 
 The installed-app manifest audit on the development phone found direct native

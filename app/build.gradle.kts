@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.nonlog.oplusfluidcompat"
         minSdk = 35
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.8.2"
+        versionCode = 14
+        versionName = "0.8.3"
     }
 
     buildTypes {

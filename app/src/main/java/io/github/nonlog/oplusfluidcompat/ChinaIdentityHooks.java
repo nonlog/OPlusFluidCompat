@@ -188,7 +188,7 @@ final class ChinaIdentityHooks {
             }
         }
         module.log(Log.INFO, TAG, "China identity hooks: properties=" + properties + " features="
-                + features + " metadata=" + metadata + "; no permission/authentication changes");
+                + features + " metadata=" + metadata + "; identity layer grants no Android permissions");
     }
 
     private void auditNativeProviders(Context context) {

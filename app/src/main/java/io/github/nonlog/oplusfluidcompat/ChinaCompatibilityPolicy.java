@@ -68,6 +68,12 @@ public final class ChinaCompatibilityPolicy {
                 || value.regionMatches(true, Math.max(0, value.length() - 8), ".package", 0, 8);
     }
 
+    public static boolean isSeedlingRegistrationCandidate(String packageName, boolean systemApp,
+            boolean hasCardAuthDeclaration, int descriptorCount) {
+        return !systemApp && hasCardAuthDeclaration && descriptorCount > 0
+                && isClientCandidate(packageName);
+    }
+
     public static boolean isNativeDiscoveryMethod(String method) {
         return "findSeedlingService".equals(method) || "queryDomainEnable".equals(method)
                 || "queryDomainEnableGroup".equals(method) || "queryDomainEnableV3".equals(method)

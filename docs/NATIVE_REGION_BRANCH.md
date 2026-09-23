@@ -89,6 +89,17 @@ names. Targeted `dexdump` inspection of UMS 17.17.0 confirmed `Scanner.b` is the
 Application field and `ff.a.a` is the packageName field. 0.8.2 uses those verified DEX
 identifiers; the constructor signature itself already matched the bytecode.
 
+0.8.3 addresses the second Seedling registration gate. The normal full scan executes
+`Scanner.h(null)` and then `Scanner.a(ArrayList)`. Targeted DEX inspection confirms the
+latter is really named `a` with descriptor `(Ljava/util/ArrayList;)V`. Its native body
+builds the provider package list, calls the OCS `CARD_CLIENT` capability check, and
+removes entries not present in the pass list. The module snapshots the list, allows
+that native filter to execute unchanged, and restores only removed non-system
+third-party packages that still prove the actual Seedling protocol in their manifest:
+a `SEEDLING_CARD` provider, at least one `.upk`/`.package` descriptor, and a non-empty
+`com.oplus.ocs.card.AUTH_CODE` application declaration. It does not hook the global
+OCS authentication APIs or persist a synthetic success into `ocs_cache_table`.
+
 ## Validation and rollback
 
 The verified checkpoint below is not universal ColorOS application support.
