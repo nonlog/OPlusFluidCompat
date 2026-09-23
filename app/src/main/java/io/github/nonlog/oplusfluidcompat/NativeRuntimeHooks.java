@@ -3,6 +3,7 @@ package io.github.nonlog.oplusfluidcompat;
 import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
@@ -293,6 +294,12 @@ final class NativeRuntimeHooks {
         try {
             PackageInfo info = context.getPackageManager().getPackageInfo(
                     packageName, PackageManager.GET_PERMISSIONS);
+            ApplicationInfo applicationInfo = info.applicationInfo;
+            if (applicationInfo == null || (applicationInfo.flags
+                    & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0) {
+                flashViewsClients.put(packageName, false);
+                return false;
+            }
             if (info.requestedPermissions != null) {
                 for (String permission : info.requestedPermissions) {
                     if (FLASH_VIEWS_PERMISSION.equals(permission)) {

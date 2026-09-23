@@ -46,7 +46,7 @@ is called: its ONet service dependency was not found on the inspected device.
 without logging parameters, changing their results, enabling unrelated ONet
 data collection or installing any replacement system APK.
 
-## 0.8.0 native registration gates
+## 0.8.x native registration gates
 
 The next compatibility layer targets gates observed in the shipped binaries rather
 than fabricating the empty `ConnectManager` cloud responses.
@@ -55,7 +55,7 @@ SystemUI's `FlashViewsService.onBind` first calls
 `SettingsUtils.isValidCaller(...)`, then requires
 `ConfigurationManager.isSupportFlashViews(package)`. The latter requires a RUS entry
 with `userEnable=true`, while the former rejects an unregistered third-party package
-and verifies configured signers for registered packages. The 0.8.0 hook changes only
+and verifies configured signers for registered packages. The 0.8.x hook changes only
 the missing-registration/support decisions for real FlashViews clients. Existing RUS
 signer mismatches stay rejected, and the native service/data/rendering implementation
 remains unchanged.
@@ -64,7 +64,7 @@ UMS `Scanner.h(package)` independently exposes another registration gate. It que
 real `com.oplus.seedling.action.SEEDLING_CARD` providers and reads each provider's
 `oplus.seedling.provider` manifest metadata, but only accepts the package when it is
 already present in the local service repository. Otherwise it logs
-`queryAccessPackages noScanLocal:<package>` and discards it. 0.8.0 augments the
+`queryAccessPackages noScanLocal:<package>` and discards it. 0.8.x augments the
 scanner result with that real provider and its own `.upk`/`.package` descriptor list;
 it does not create a service ID, remote response or business payload.
 
@@ -76,6 +76,12 @@ that asset is not a third-party China-service repository replacement.
 Both new runtime profiles fail closed outside Android 16 build
 `CPH2573_16.0.10.501(EX01)`; the UMS scanner profile additionally requires UMS
 versionCode `17017000` (17.17.0).
+
+CI 28 / 0.8.0 exposed one boundary issue during the first device startup: SystemUI
+itself requests the FlashViews permission and therefore matched the support hook even
+though the native service already exempts SystemUI. 0.8.1 excludes system and updated
+system applications from the compatibility predicate, so the bypass remains a
+third-party native-client path.
 
 ## Validation and rollback
 
