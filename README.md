@@ -5,7 +5,36 @@ is native China ColorOS app compatibility, not notification conversion. AMap's
 native renderer is the first acceptance test; other native clients are included
 in the compatibility investigation, not declared working merely by being scoped.
 
-## Current status: 0.7.1 native China branch verified; all-app compatibility unresolved
+## Current status: 0.8.0 native registration compatibility candidate
+
+0.8.0 extends the verified 0.7.1 China-region work into two native registration
+gates found on the inspected ROM. It is intentionally not described as universal
+compatibility until the CI artifact is installed and exercised with real client data.
+
+For FlashViews, SystemUI keeps the ROM's native service, renderer, rate limiting and
+existing signer verification. A package already known to the native RUS table may
+pass the disabled `userEnable` support gate when it really requests
+`com.oplus.flashback.permission.FLASH_VIEWS_SERVICE`. A package missing from the RUS
+table is admitted through the missing-registration check only when it requests that
+permission **and** carries another native OPlus integration marker (immersive/OCS,
+Seedling provider, or FanZai provider). An existing RUS signer mismatch is never
+converted to success.
+
+For Seedling, the OOS UMS scanner already discovers real
+`com.oplus.seedling.action.SEEDLING_CARD` providers and their
+`oplus.seedling.provider` metadata, but drops a provider when its package is absent
+from the local `service_info` repository. 0.8.0 restores that provider to the native
+scanner result using its own `.upk`/`.package` descriptors and installed package
+metadata. It does not synthesize service IDs, card contents, order state or network
+discovery responses. This path is pinned to the inspected UMS 17.17.0 and ROM build.
+
+The installed-app manifest audit on the development phone found direct native
+FlashViews evidence in AMap and Meituan. The installed JD and Taobao builds did not
+declare the inspected OPlus markers; Baidu Map was not installed. OCS auth metadata
+alone (seen in apps such as Alipay, QQ Music and Xiaohongshu) is not treated as proof
+of Fluid Cloud support.
+
+### Verified 0.7.1 checkpoint
 
 0.7.1 was built by GitHub Actions run 27, installed as versionCode 10, and checked
 on the rooted development device. The native FlashBack initializer now receives
@@ -28,7 +57,9 @@ unverified. The attempted fresh phone UI test did not produce a navigation resul
 
 The process-local identity layer continues to cover opted-in clients with genuine
 OPlus manifest declarations. It does not alter system-server, ROM partitions,
-model/fingerprint, package signatures, caller identity or security permissions.
+model/fingerprint, caller identity or Android permission grants. 0.8.0 adds the
+scoped native registration checks described above; it does not globally disable
+signature enforcement.
 See [native region branch and CI/device evidence](docs/NATIVE_REGION_BRANCH.md)
 and [the earlier identity investigation](docs/CHINA_IDENTITY.md).
 
@@ -73,9 +104,11 @@ of remote surface) and missing native navigation RUS configuration. It reuses th
 ROM's existing navigation profile only for the missing production AMap entry. The
 original OPlus host must bind the service and display the surface rendered by AMap.
 
-No notification-listener app, replacement map UI, broad permission bypass, UMS/OCS
-database edit, or all-app unlock is included. An ordinary capsule, passing CI, and
-installed hooks are not proof that native immersive navigation works.
+No notification-listener app, replacement map UI, Android permission grant, UMS/OCS
+database edit, or generic notification conversion is included. The new registration
+bypass is constrained to genuine native declarations on the inspected runtime. An
+ordinary capsule, passing CI, and installed hooks are not proof that native immersive
+navigation works.
 
 ## Compatibility and scope
 

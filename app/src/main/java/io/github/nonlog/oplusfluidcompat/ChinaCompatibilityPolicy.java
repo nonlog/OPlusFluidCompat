@@ -57,6 +57,17 @@ public final class ChinaCompatibilityPolicy {
         return sdk == 36 && "CPH2573_16.0.10.501(EX01)".equals(build);
     }
 
+    public static boolean supportsUmsRegistrationProfile(int sdk, String build, long versionCode) {
+        return supportsFlashbackProfile(sdk, build) && versionCode == 17017000L;
+    }
+
+    public static boolean isSeedlingDescriptorPath(String path) {
+        if (path == null) return false;
+        String value = path.trim();
+        return value.regionMatches(true, Math.max(0, value.length() - 4), ".upk", 0, 4)
+                || value.regionMatches(true, Math.max(0, value.length() - 8), ".package", 0, 8);
+    }
+
     public static boolean isNativeDiscoveryMethod(String method) {
         return "findSeedlingService".equals(method) || "queryDomainEnable".equals(method)
                 || "queryDomainEnableGroup".equals(method) || "queryDomainEnableV3".equals(method)
