@@ -1,5 +1,12 @@
 package io.github.nonlog.oplusfluidcompat;
 
+import android.app.Application;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.os.Build;
+import android.os.Bundle;
 import android.util.Log;
 import io.github.libxposed.api.XposedModule;
 import java.lang.annotation.Annotation;
@@ -11,7 +18,10 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
@@ -69,10 +79,11 @@ final class UmsDomesticDiscoveryBridge {
     boolean install() {
         try {
             resolveRuntime();
+            installDomesticCommonHeadersHook();
             installDomesticBaseUrlHook();
             installConnectManagerHooks();
             logOnce("installed", "native UMS domestic discovery bridge installed: 6/6; "
-                    + "ROM HTTP/signing stack retained");
+                    + "CN common headers + ROM signing/encryption stack retained");
             return true;
         } catch (Throwable error) {
             module.log(Log.WARN, TAG, "UMS domestic discovery bridge unavailable", error);
@@ -127,6 +138,193 @@ final class UmsDomesticDiscoveryBridge {
                 "queryMeta", requestBodyClass, continuationClass);
         apiDownload = seedlingApiClass.getDeclaredMethod(
                 "downloadUpk", String.class, continuationClass);
+    }
+
+    /**
+     * OOS 17.17 keeps the same interceptor slot as the C16 network stack, but xf.a is a no-op.
+     * Restore only the public device/service headers emitted by C16 before the ROM's existing
+     * signing and encryption interceptors run. Authentication/signature material is still
+     * produced entirely by the target UMS implementation.
+     */
+    private void installDomesticCommonHeadersHook() throws Exception {
+        Class<?> interceptorClass = Class.forName("xf.a", false, loader);
+        Class<?> chainClass = Class.forName("okhttp3.t$a", false, loader);
+        Class<?> requestClass = Class.forName("okhttp3.w", false, loader);
+        Class<?> requestBuilderClass = Class.forName("okhttp3.w$a", false, loader);
+        Method intercept = interceptorClass.getDeclaredMethod("intercept", chainClass);
+        Method chainRequest = chainClass.getDeclaredMethod("request");
+        Method chainProceed = chainClass.getDeclaredMethod("a", requestClass);
+        Method requestNewBuilder = requestClass.getDeclaredMethod("b");
+        Method addHeader = requestBuilderClass.getDeclaredMethod("a", String.class, String.class);
+        Method buildRequest = requestBuilderClass.getDeclaredMethod("b");
+
+        module.hook(intercept).intercept(chain -> {
+            if (!runtimeAllowed.getAsBoolean()) return chain.proceed();
+            Object nativeChain = chain.getArg(0);
+            Object request;
+            try {
+                Application application = currentApplication();
+                if (application == null) return chain.proceed();
+                request = chainRequest.invoke(nativeChain);
+                Object builder = requestNewBuilder.invoke(request);
+                Map<String, String> headers = domesticHeaders(application);
+                for (Map.Entry<String, String> entry : headers.entrySet()) {
+                    addHeader.invoke(builder, entry.getKey(), entry.getValue());
+                }
+                request = buildRequest.invoke(builder);
+            } catch (Throwable error) {
+                module.log(Log.WARN, TAG,
+                        "UMS domestic common headers unavailable; using export interceptor", error);
+                return chain.proceed();
+            }
+            try {
+                Object response = chainProceed.invoke(nativeChain, request);
+                logOnce("common-headers",
+                        "restore C16 UMS common request headers before native signing/encryption");
+                return response;
+            } catch (InvocationTargetException error) {
+                throw error.getCause();
+            }
+        });
+    }
+
+    private Map<String, String> domesticHeaders(Application application) {
+        LinkedHashMap<String, String> headers = new LinkedHashMap<>();
+        String brand = Build.BRAND;
+        if (brand == null || brand.isEmpty()) {
+            brand = systemProperty("ro.product.brand.sub", "OPPO");
+        }
+        headers.put("brand", safe(brand));
+        headers.put("model", safe(Build.MODEL));
+        headers.put("osVersion", oplusOsRelease());
+        headers.put("umsVersion", packageVersion(application, ChinaCompatibilityPolicy.UMS));
+        headers.put("metisVersion", packageVersion(application, "com.oplus.metis"));
+        headers.put("dtVersion", packageVersion(application, deepThinkerPackage()));
+        headers.put("engineVersion", seedlingEngineVersion(application));
+        headers.put("appKey", "ums-admin");
+        headers.put("oaid", targetOaid());
+        headers.put("sceneVersion", packageVersion(application, "com.coloros.sceneservice"));
+        headers.put("device", isTablet() ? "TABLET" : "PHONE");
+        headers.put("foldType", foldType());
+        headers.put("osType", productType(application));
+        headers.put("lang", language(application.getResources().getConfiguration()));
+        return headers;
+    }
+
+    private String oplusOsRelease() {
+        try {
+            Class<?> version = Class.forName("com.oplus.os.OplusBuild$VERSION", false, loader);
+            Field release = version.getDeclaredField("RELEASE");
+            release.setAccessible(true);
+            return safe(release.get(null));
+        } catch (Throwable ignored) {
+            return safe(Build.VERSION.RELEASE);
+        }
+    }
+
+    private String packageVersion(Application application, String packageName) {
+        if (packageName == null || packageName.isEmpty()) return "-1";
+        try {
+            PackageInfo info = application.getPackageManager().getPackageInfo(packageName, 0);
+            return String.valueOf(info.getLongVersionCode());
+        } catch (Throwable ignored) {
+            return "-1";
+        }
+    }
+
+    private String deepThinkerPackage() {
+        try {
+            Class<?> type = Class.forName(
+                    "com.oplus.deepthinker.sdk.app.IOplusDeepThinkerManager", false, loader);
+            Field field = type.getDeclaredField("SERVICE_PKG");
+            field.setAccessible(true);
+            Object value = field.get(null);
+            if (value instanceof String && !((String) value).isEmpty()) return (String) value;
+        } catch (Throwable ignored) {
+        }
+        return "com.oplus.deepthinker";
+    }
+
+    private String seedlingEngineVersion(Application application) {
+        try {
+            ApplicationInfo info = application.getPackageManager().getApplicationInfo(
+                    application.getPackageName(), PackageManager.GET_META_DATA);
+            Bundle metadata = info == null ? null : info.metaData;
+            return String.valueOf(metadata == null ? 0 : metadata.getInt("seedlingEngineVersion", 0));
+        } catch (Throwable ignored) {
+            return "0";
+        }
+    }
+
+    /** Reuse the OAID lazy value already shipped in this exact OOS UMS build. */
+    private String targetOaid() {
+        try {
+            Class<?> holder = Class.forName("vf.a", true, loader);
+            for (Field field : holder.getDeclaredFields()) {
+                if (!Modifier.isStatic(field.getModifiers()) || field.getType() == boolean.class) continue;
+                field.setAccessible(true);
+                Object lazy = field.get(null);
+                if (lazy == null) continue;
+                try {
+                    Method getValue = lazy.getClass().getMethod("getValue");
+                    Object value = getValue.invoke(lazy);
+                    if (value != null) return String.valueOf(value);
+                } catch (NoSuchMethodException ignored) {
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
+
+    private boolean isTablet() {
+        return systemProperty("ro.build.characteristics", "").toLowerCase(Locale.ROOT)
+                .contains("tablet");
+    }
+
+    private String foldType() {
+        String raw = systemProperty("ro.hw.foldtype", "");
+        try {
+            return String.valueOf(Integer.parseInt(raw));
+        } catch (Throwable ignored) {
+            return "0";
+        }
+    }
+
+    private String productType(Application application) {
+        PackageManager pm = application.getPackageManager();
+        if (pm.hasSystemFeature("oplus.software.support_gp.product_full")) return "FULL";
+        if (pm.hasSystemFeature("oplus.software.support_gp.product_light_h")) return "LIGHT_H";
+        return "LIGHT";
+    }
+
+    private String language(Configuration configuration) {
+        if (configuration == null || configuration.getLocales().isEmpty()) return "zh-CN";
+        Locale locale = configuration.getLocales().get(0);
+        return safe(locale.getLanguage()) + "-" + safe(locale.getCountry());
+    }
+
+    private String systemProperty(String key, String fallback) {
+        try {
+            return safe(Class.forName("android.os.SystemProperties")
+                    .getMethod("get", String.class, String.class)
+                    .invoke(null, key, fallback));
+        } catch (Throwable ignored) {
+            return fallback;
+        }
+    }
+
+    private static String safe(Object value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private Application currentApplication() {
+        try {
+            return (Application) Class.forName("android.app.ActivityThread")
+                    .getDeclaredMethod("currentApplication").invoke(null);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private void installDomesticBaseUrlHook() throws Exception {

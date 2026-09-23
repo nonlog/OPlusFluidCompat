@@ -5,7 +5,21 @@ is native China ColorOS app compatibility, not notification conversion. AMap's
 native renderer is the first acceptance test; other native clients are included
 in the compatibility investigation, not declared working merely by being scoped.
 
-## Current status: 0.8.3 native registration compatibility candidate
+## Current status: 0.9.1 domestic discovery compatibility candidate
+
+0.9.x restores the domestic service-governance branch that is compiled out of OOS
+UMS 17.17.0. The export APK still contains the OEM `SeedlingApi`, response models,
+signing/encryption interceptors, and calculate updaters, but its `ConnectManager`
+returns empty/failure results, its Retrofit base URL is empty, and its common-header
+interceptor is a no-op. The compatibility bridge reconnects those retained OEM pieces
+to the production C16 service-governance endpoint and restores the same non-secret
+device/service headers C16 emits **before** the OEM signing/encryption interceptors.
+Network responses are converted back into the ROM's own `ResultEntity`; service IDs,
+business state, card payloads, signatures, and authentication results are not invented.
+
+This remains a candidate until the GitHub Actions artifact is installed and real CN
+discovery is observed on-device. It also does not claim that OOS contains every
+domestic SceneService/TravelEngine business component present in ColorOS.
 
 0.8.x extends the verified 0.7.1 China-region work across three native registration
 gates found on the inspected ROM. It is intentionally not described as universal
