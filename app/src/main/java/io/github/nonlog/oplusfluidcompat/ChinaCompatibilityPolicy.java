@@ -61,6 +61,10 @@ public final class ChinaCompatibilityPolicy {
         return supportsFlashbackProfile(sdk, build) && versionCode == 17017000L;
     }
 
+    public static boolean supportsUmsDomesticDiscoveryProfile(int sdk, String build, long versionCode) {
+        return supportsUmsRegistrationProfile(sdk, build, versionCode);
+    }
+
     public static boolean isSeedlingDescriptorPath(String path) {
         if (path == null) return false;
         String value = path.trim();

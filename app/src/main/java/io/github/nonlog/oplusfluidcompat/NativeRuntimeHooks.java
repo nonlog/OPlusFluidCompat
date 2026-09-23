@@ -137,6 +137,10 @@ final class NativeRuntimeHooks {
     }
 
     void installUmsDiagnostics(ClassLoader loader) {
+        new UmsDomesticDiscoveryBridge(module, loader, () -> {
+            Application application = currentApplication();
+            return application != null && supportsUmsRuntime(application);
+        }).install();
         try {
             Class<?> connect = Class.forName(
                     "com.pantanal.server.connect.support.ConnectManager", false, loader);
@@ -147,7 +151,7 @@ final class NativeRuntimeHooks {
                 module.hook(method).intercept(chain -> {
                     Object result = chain.proceed();
                     logOnce("discovery-" + name, "native UMS discovery invoked: " + name
-                            + "; original implementation retained (no fabricated service result)");
+                            + "; domestic bridge may handle this call; no fabricated service result");
                     return result;
                 });
                 count++;

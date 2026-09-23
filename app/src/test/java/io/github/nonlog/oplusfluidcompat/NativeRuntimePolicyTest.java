@@ -32,6 +32,15 @@ public final class NativeRuntimePolicyTest {
                 36, "CPH2573_16.0.10.502(EX01)", 17017000L));
     }
 
+    @Test public void domesticUmsDiscoveryUsesTheSameExactRuntimeGuard() {
+        assertTrue(ChinaCompatibilityPolicy.supportsUmsDomesticDiscoveryProfile(
+                36, "CPH2573_16.0.10.501(EX01)", 17017000L));
+        assertFalse(ChinaCompatibilityPolicy.supportsUmsDomesticDiscoveryProfile(
+                36, "CPH2573_16.0.10.501(EX01)", 16001080L));
+        assertFalse(ChinaCompatibilityPolicy.supportsUmsDomesticDiscoveryProfile(
+                35, "CPH2573_16.0.10.501(EX01)", 17017000L));
+    }
+
     @Test public void seedlingDescriptorPathsOnlyAcceptNativePackageAssets() {
         assertTrue(ChinaCompatibilityPolicy.isSeedlingDescriptorPath("cards/order.upk"));
         assertTrue(ChinaCompatibilityPolicy.isSeedlingDescriptorPath("cards/order.PACKAGE"));
