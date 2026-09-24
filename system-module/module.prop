@@ -1,7 +1,7 @@
 id=oplusfluidcompat_system
 name=OPlusFluidCompat-System
-version=v0.1.0
-versionCode=1
+version=v0.2.0
+versionCode=2
 author=OPlusFluidCompat
-description=ColorOS Fluid Cloud system companion. Adds PJD110 CN TravelEngine + CN my_region config. Requires OPlusFluidCompat LSPosed module.
+description=ColorOS Fluid Cloud system companion. Overlays PJD110 CN UMS, SceneService and TravelEngine. Requires the OPlusFluidCompat LSPosed module.
 updateJson=
