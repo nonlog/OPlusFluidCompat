@@ -1,0 +1,26 @@
+{
+  "firmware": "PJD110_16.0.10.501(CN01)",
+  "firmware_md5": "ec2001b7d8e6b945308f152aa773a26b",
+  "excluded": "CN my_region overlay deliberately NOT shipped. A root-level module file (my_region/build.prop) makes hybrid_mount take its 'shallow overlay' path for /my_region: it mounts an overlay on /my_region and then bind-mounts a staging etc over /my_region/etc. ZygiskNext later unmounts module mounts inside the zygote/system_server namespace, exposing that staging etc, so /my_region/etc is EMPTY for system_server - confirmed by 'CustomizeStateHelper: No directory /my_region/etc/extension' and 'OplusAppConfigManager: No directory /my_region/etc/config' in the same process at the same instant. With /my_region/etc/config/app_v2.xml unreadable, the region <enable pkg=com.coloros.sceneservice priority=9> never enters enableMap, the my_stock <disable ... priority=10> survives reconciliation, and com.coloros.sceneservice is dropped from the PMS boot scan entirely ('locate /product/priv-app/SceneService/SceneService.apk ignored'), so it disappears from pm list. The overlay was also useless: init loads ro.* props before KernelSU mounts, so a bind-mounted my_region/build.prop cannot change the region, and OsFeatureConfiguration read the extension XMLs at 08:18:32, before hybrid_mount applied overlays at 08:18:37. CN UMS 16.59.6 and CN SceneService 17.6.0 are also not overlaid: UMS keeps a /data/app 17.17.0 update that PMS prefers anyway, and overlaying SceneService only re-adds the blacklist problem above. All privapp-permissions XMLs are still shipped (harmless).",
+  "blobs": [
+    {
+      "module_path": "system/product/priv-app/TravelEngine/TravelEngine.apk",
+      "vendor_path": "vendor/PJD110_CN/priv-app/TravelEngine.apk",
+      "package": "com.oplus.travelengine",
+      "versionName": "15.0.25_eccf83b_202607012159",
+      "versionCode": 15000025,
+      "sha256": "243fd5b5c8a4f3e36fc8441254a63e23afe7721fd29ff7330213182099864d64"
+    },
+    {
+      "module_path": "system/product/etc/permissions/com.oplus.pantanal.ums.privapp_permissions.xml",
+      "vendor_path": "vendor/PJD110_CN/permissions/com.oplus.pantanal.ums.privapp_permissions.xml",
+      "sha256": "1edbe460807bf71baabc2485a55ee64b65a9d3c353258cfcafb4cacff9dd3db5"
+    },
+    {
+      "module_path": "system/product/etc/permissions/privapp-permissions-oplusfluid.xml",
+      "vendor_path": "vendor/PJD110_CN/permissions/privapp-permissions-oplusfluid.xml",
+      "note": "Verbatim PJD110 stanzas for travelengine+sceneservice only",
+      "sha256": "d18f2b01ba0f6348a1722d405a48fa6bc3d791c5a4a176d8f9abd4671c444cbf"
+    }
+  ]
+}
