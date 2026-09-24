@@ -3,3 +3,7 @@
 local.properties
 **/build/
 *.iml
+# COS Fluid Cloud restore: proprietary blobs + local test artifacts (plan §15)
+vendor/
+out/
+artifacts/cos-restore/
