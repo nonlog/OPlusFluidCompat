@@ -6,34 +6,11 @@ Module `oplusfluidcompat_system` v0.2.2 (versionCode 4), LSPosed companion
 
 ## Result
 
-The three overlaid CN builds are active and stable, and SystemUI's native
-Seedling (Fluid Cloud) subsystem is running a real AMap capsule.
+The overlay half works: the three CN builds are active, stable, and inside
+privapp enforcement, and they survive reboot. The Fluid Cloud half does **not**
+work yet — see "Not achieved" below.
 
-Status bar on the home screen, 12:40:
-
-> black capsule, navigation arrow + `高德地图`
-
-AMap was in turn-by-turn navigation at the time, showing `21m 无名道路`
-(maneuver arrow, distance, road name) — the structured fields the capsule
-carries.
-
-Seedling log at the moment the capsule formed:
-
-```
-WindowController-->curState:1 curKeyArray: ["0|com.autonavi.minimap|99910001|null|10364"]
-CapsuleBubbleEx-->getDuration: customDuration=-1 serviceId=laid_com.autonavi.minimap
-CapsuleVisEx-->onStateChanged: sourceStateSTART_STATE, targetState:CAPSULE_STATE,
-                                contentState:NORMAL
-SimpleSceneBuilder-->afterAction APP_TO_CAPSULE_WITH_NONE
-OplusFloorRefreshRateController: onSeedlingCardStateChange state=1
-```
-
-Evidence files: `out/evidence/capsule-home.png` (capsule),
-`out/evidence/amap-nav.png` (navigation state),
-`out/evidence/seedling-capsule.txt` (logs). `out/` is gitignored, so these are
-local artifacts and are not part of the commit.
-
-## Active package state
+## Overlay state
 
 | package | versionCode | version | path |
 | --- | --- | --- | --- |
@@ -83,6 +60,32 @@ Both were invisible from `adb shell`: the mounts are correct in every
 namespace, including `system_server`'s —
 `sha256sum /proc/$(pidof system_server)/root/product/priv-app/...` returned the
 CN hash while `dumpsys package` still reported the export build.
+
+## Not achieved — no native card
+
+An earlier revision of this document claimed the AMap capsule was the native
+Fluid Cloud card. That was wrong. What appears on the status bar is the
+**ordinary notification capsule** — the shade still shows
+`高德地图持续为您导航` — which the plan explicitly says does not count.
+
+The tell was in the log line that was quoted as evidence:
+
+```
+curState:1 curKeyArray: ["0|com.autonavi.minimap|99910001|null|10364"]
+serviceId=laid_com.autonavi.minimap
+updateJson {"enable":0,"curState":1,...}
+```
+
+- `enable:0` — the capsule feature is off for this entry.
+- `laid_com.autonavi.minimap` / `99910001` — a notification-derived capsule,
+  not the cloud service `536878000` that `package_mapping_config.json` maps
+  AMap to.
+- `CardRootViewModel-->not card state: false` — no card was built; the capsule
+  never entered card state.
+
+So the CN overlay is active but nothing is driving the native card path. The
+next question is whether the LSPosed companion is actually feeding navigation
+state to UMS, or whether UMS is failing to publish a cloud card.
 
 ## Not done
 
