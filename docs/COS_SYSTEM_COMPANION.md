@@ -126,16 +126,41 @@ Note the export ROM has **no** complete AMap profile anywhere. Its AMap entries
 are cloud ids `536878018` and `536879184`, and those carry only the same two
 immersive flags. `com.baidu.BaiduMap` is `536877940`, likewise minimal.
 
-### Open question that changes the fix
+### The cloud path is NOT the mechanism (hypothesis tested and rejected)
 
-The CN `SystemUIPlugin.apk` in `vendor/PJD110_16.0.10.501_CN01/system_ext.img`
-has an inode size of exactly 9,143,592 bytes - identical to the OOS
-`SystemUIPlugin.apk` whose hash the module pins as `PLUGIN_SHA256`. If the
-plugin is not region-specific, then CN has no `laid_com.autonavi.minimap`
-profile either, and the real CN AMap card must arrive through the **cloud path**
-(`536878000` in the CN UMS `package_mapping_config.json`) rather than a local
-RUS profile. That would mean the fix is not "complete the cloned profile" but
-"stop synthesising a local profile and drive the cloud card".
+An earlier revision of this section suggested the card might be supposed to come
+through the cloud path (`536878000` via UMS) rather than a local RUS profile.
+Tested on device with AMap actually navigating, and rejected:
+
+- UMS `decision_result` holds exactly one row, `536877097`
+  (`application_suggestions`). No AMap decision exists even mid-navigation:
+
+  ```
+  SG::DecisionResultProvider: [UMS.Seedling] query decision result,
+    sql: SELECT * FROM decision_result WHERE (available = 1) and ...
+  merge start, list size:1 -> serviceId=536877097
+  ```
+
+- The provider itself works - SystemUI queries it as `caller=com.android.systemui`
+  and gets that row back - so an absent AMap row means nothing ever told UMS
+  AMap was navigating.
+- UMS can only carry a service an app reports, and AMap declares
+  `seedling=false`, so AMap never feeds UMS by that route.
+- AMap does declare `immersive=true`, and `AMapImmerseNaviService` connected
+  and returned `hasSurfacePackage=true`.
+
+So the immersive/RUS path the module already drives is the correct layer, and
+the fix is to give the cloned profile the live-update fields it lacks. The CN
+plugin's real profile would confirm the exact values but is not needed to know
+*which* fields are missing.
+
+### The user-visible symptom, confirmed
+
+With navigation running, the status-bar capsule shows only the app name, and
+tapping it expands to a card reading `高德地图 / 正在导航` - the notification's
+own text, with no map surface, maneuver, distance, road or ETA. That is the
+notification rendered as a card, which is consistent with a live alert whose
+only content source is the notification.
 
 Not settled, because the CN plugin is stored as `COMPRESSED_COMPACT`
 (`iformat=0x0006`, datalayout 3) and `tools/erofs_min.py` reads only flat
@@ -169,6 +194,11 @@ Routes ruled out, so nobody retries them:
 What remains is porting `unpack_compacted_index` / `decode_compactedbits` plus
 the pcluster-length rules, with LZ4 block decode from the `lz4` Python package.
 That is a project, not a patch, which is why it is not done here.
+
+It is now **optional**. Rejecting the cloud-path hypothesis established which
+fields are missing, and the working profiles in the export ROM show what a
+complete profile looks like, so the CN profile would only confirm exact values
+for `la_score` / `la_tlevel` rather than identify the gap.
 
 ## Not done
 
