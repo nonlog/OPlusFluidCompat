@@ -27,7 +27,7 @@ $stage = Join-Path ([IO.Path]::GetTempPath()) ('oplusfluid-system-' + [Guid]::Ne
 New-Item -ItemType Directory -Path $stage | Out-Null
 try {
   # Tracked module skeleton (scripts, metadata, README, manifest)
-  foreach ($item in @('module.prop', 'customize.sh', 'post-mount.sh', 'README.md', 'vendor-manifest.json')) {
+  foreach ($item in @('module.prop', 'customize.sh', 'post-fs-data.sh', 'post-mount.sh', 'README.md', 'vendor-manifest.json')) {
     Copy-Item (Join-Path $RepoRoot "system-module\$item") (Join-Path $stage $item)
   }
 

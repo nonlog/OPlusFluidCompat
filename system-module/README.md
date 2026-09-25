@@ -14,6 +14,22 @@ domestic Fluid Cloud stack from **PJD110_16.0.10.501(CN01)** onto OOS:
 `hybrid_mount` promotes the module's `system/product/...` paths to
 `/product/...` on this device, which is what `pm path` must report.
 
+`post-fs-data.sh` drops the affected `/data/system/package_cache` entries once
+per module `versionCode`. Without it PMS keeps serving a cached parse of the
+export APK and never reads the overlaid file: the package retains its old
+`versionCode` and resource ids while the app process loads the CN resource
+table, and SceneService dies with
+
+```
+Unexpected start tag: found androidx.preference.PreferenceScreen,
+expected network-security-config
+```
+
+The mount is correct in every namespace, so this is invisible from `adb shell`
+— `sha256sum /proc/$(pidof system_server)/root/product/priv-app/...` shows the
+CN APK while `dumpsys package` still reports the export build. Do not fix it by
+wiping the whole cache directory; see `customize.sh`.
+
 No `my_region` files are shipped: a root-level module file under `my_region/`
 makes `hybrid_mount` bind a staging `etc` over `/my_region/etc`, leaving that
 directory empty inside the `system_server` namespace once ZygiskNext unmounts
@@ -33,17 +49,24 @@ my_stock mirrors, signature-check weakening, app-data clearing.
    hash-verified against the device:
    `UMS-17.17.0-active.apk`, `UMS-16.59.6-factory.apk`,
    `SceneService-17.3.4-factory.apk`, `SceneService-17.7.10-active.apk`.
-2. `pm uninstall-system-updates com.oplus.pantanal.ums`
+2. `pm uninstall-system-updates com.oplus.pantanal.ums` **as root** — running it
+   as the `shell` user fails with "Couldn't uninstall package" because shell
+   lacks `DELETE_SYSTEM_APP`.
 
    The CN UMS is versionCode 16059006 — the *same* as the OOS factory build —
    so the 17.17.0 `/data/app` update outranks it and must be removed or the
    overlay never becomes active. SceneService needs no equivalent step: its
    `/data/app` update is already gone and CN 17.6.0 (17006000) is above the
    factory 17003004.
-3. Flash the module ZIP and reboot.
+3. Flash the module ZIP and reboot. This boot is the one that matters for the
+   privapp allowlist: removing the export update drops the
+   `UPDATED_SYSTEM_APP` flag from UMS, which is what had been exempting it from
+   `checkPrivilegedPermissionAllowlist()`. If the allowlist is short a
+   permission, `system_server` throws in `onSystemReady()` and bootloops.
 4. Verify: `pm path` reports `/product/priv-app/...` for all three packages,
-   `dumpsys package` shows the CN versionCodes, and the installed APK hashes
-   match `system-module/vendor-manifest.json`.
+   `dumpsys package` shows the CN versionCodes (SceneService 17006000, UMS
+   16059006), and the installed APK hashes match
+   `system-module/vendor-manifest.json`.
 
 ## Recovery
 
