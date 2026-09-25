@@ -7,3 +7,5 @@ local.properties
 vendor/
 out/
 artifacts/cos-restore/
+__pycache__/
+*.pyc

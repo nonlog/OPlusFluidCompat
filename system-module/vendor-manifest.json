@@ -42,8 +42,8 @@
     {
       "module_path": "product/etc/permissions/privapp-permissions-oplusfluid.xml",
       "vendor_path": "vendor/PJD110_CN/permissions/privapp-permissions-oplusfluid.xml",
-      "note": "Verbatim PJD110 stanzas for travelengine+sceneservice only",
-      "sha256": "d18f2b01ba0f6348a1722d405a48fa6bc3d791c5a4a176d8f9abd4671c444cbf"
+      "note": "privapp allowlist for all three overlaid packages. Covers every PROTECTION_FLAG_PRIVILEGED permission the CN APKs request: without it PermissionManagerServiceImpl.onSystemReady() throws IllegalStateException and system_server bootloops (ro.control_privapp_permissions=enforce, ro.build.type=user). travelengine / pantanal.ums / coloros.sceneservice stanzas verbatim from my_stock/etc/permissions/privapp-permissions-oplus-products.xml; READ_PRIVILEGED_PHONE_STATE and START_ACTIVITIES_FROM_BACKGROUND for coloros.sceneservice are ADDED (no OOS allowlist grants them; the CN file holding them is lz4-compressed in my_stock.img and unreadable with tools/erofs_min.py). The XML comment must stay free of double hyphens - two adjacent hyphens are illegal in an XML comment and a parser then drops the whole file's grants.",
+      "sha256": "ccaf458e55b7edf77a2ffeb3808ab27c5c05dc921def7be3d07135cce54d06ba"
     }
   ]
 }
