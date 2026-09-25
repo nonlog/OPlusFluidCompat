@@ -83,9 +83,69 @@ updateJson {"enable":0,"curState":1,...}
 - `CardRootViewModel-->not card state: false` — no card was built; the capsule
   never entered card state.
 
-So the CN overlay is active but nothing is driving the native card path. The
-next question is whether the LSPosed companion is actually feeding navigation
-state to UMS, or whether UMS is failing to publish a cloud card.
+So the CN overlay is active but nothing is driving the native card path.
+
+### Root cause: the RUS profile the module clones is a 3-attribute stub
+
+`MainModule.java:229-245` clones the ROM's `laid_com.amap.navi.demo` RUS entry,
+copies all 25 fields, and overrides only `args[0]` (the id). The RUS table lives
+in the plugin APK, `com.oplus.systemui.plugins`, at `res/3C.xml`; extracted with
+`tools/privapp_audit.py`'s binary-AXML walker (`out/evidence/rus-3C.xml`).
+
+The demo entry has three attributes:
+
+```
+service: id=laid_com.amap.navi.demo, lockImmersiveEnable=1, lockImmersiveDefault=1
+```
+
+Every working local profile in the same table has eight, and the five extra are
+exactly the live-update channel:
+
+```
+service: id=laid_com.oneplus.deskclock, update_state_enable=1, canDelete=0,
+         remind_always=1, la_score=6.3, la_tlevel=2, lu_settings=1, service_type=1
+```
+
+The runtime `RusBaseData` reproduces the stub field for field - every absent
+attribute shows up as its default:
+
+| runtime field | demo attribute | working profile |
+| --- | --- | --- |
+| `updateStateEnable=0` | absent | `update_state_enable=1` |
+| `luSettings=[]` | absent | `lu_settings=1` |
+| `liveAlertScore=-1.0` | absent | `la_score=6.3` |
+| `liveAlertLevel=-1` | absent | `la_tlevel=2` |
+| `serviceType=null` | absent | `service_type=1` |
+| `lockImmersiveEnable=1` | present | present |
+
+The clone is faithful; the template has no channel to carry maneuver, distance
+or road into the capsule, which leaves the notification's static text as the
+only content available. That is the whole of the reported symptom.
+
+Note the export ROM has **no** complete AMap profile anywhere. Its AMap entries
+are cloud ids `536878018` and `536879184`, and those carry only the same two
+immersive flags. `com.baidu.BaiduMap` is `536877940`, likewise minimal.
+
+### Open question that changes the fix
+
+The CN `SystemUIPlugin.apk` in `vendor/PJD110_16.0.10.501_CN01/system_ext.img`
+has an inode size of exactly 9,143,592 bytes - identical to the OOS
+`SystemUIPlugin.apk` whose hash the module pins as `PLUGIN_SHA256`. If the
+plugin is not region-specific, then CN has no `laid_com.autonavi.minimap`
+profile either, and the real CN AMap card must arrive through the **cloud path**
+(`536878000` in the CN UMS `package_mapping_config.json`) rather than a local
+RUS profile. That would mean the fix is not "complete the cloned profile" but
+"stop synthesising a local profile and drive the cloud card".
+
+Not settled, because the CN plugin is stored as `COMPRESSED_COMPACT`
+(`iformat=0x0006`, datalayout 3) and `tools/erofs_min.py` reads only flat
+plain/inline. `tools/erofs_chunk_probe.py` reports the lcluster-type histogram
+but its map-header offset is not yet right - it reads `clusterbits=0`, which is
+invalid, so its output must not be trusted yet. 7-Zip 26.03 supports ext4 and
+SquashFS but not EROFS, so it is no shortcut either.
+
+Settling it needs an lz4-capable EROFS reader, or the CN plugin from another
+source.
 
 ## Not done
 
