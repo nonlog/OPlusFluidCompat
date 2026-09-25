@@ -139,13 +139,36 @@ RUS profile. That would mean the fix is not "complete the cloned profile" but
 
 Not settled, because the CN plugin is stored as `COMPRESSED_COMPACT`
 (`iformat=0x0006`, datalayout 3) and `tools/erofs_min.py` reads only flat
-plain/inline. `tools/erofs_chunk_probe.py` reports the lcluster-type histogram
-but its map-header offset is not yet right - it reads `clusterbits=0`, which is
-invalid, so its output must not be trusted yet. 7-Zip 26.03 supports ext4 and
-SquashFS but not EROFS, so it is no shortcut either.
+plain/inline.
 
-Settling it needs an lz4-capable EROFS reader, or the CN plugin from another
-source.
+The on-disk format is now fully understood, from `fs/erofs/erofs_fs.h` and
+`fs/erofs/zmap.c` at tag v6.12:
+
+- map header at `ALIGN(erofs_iloc + inode_isize + xattr_isize, 8)`, 8 bytes;
+  index starts at `ebase = header_off + 8`
+- `vi->z_logical_clusterbits = sb->s_blocksize_bits + (h->h_clusterbits & 7)`,
+  so `h_clusterbits=0` is normal - it means lclustersize equals the block size.
+  An earlier note in this file called `clusterbits=0` invalid; that was wrong.
+- the plugin's `h_advise=0x0007` is `COMPACTED_2B | BIG_PCLUSTER_1 |
+  BIG_PCLUSTER_2`, so the index is the compacted mixed layout, not 8-byte
+  entries: `compacted_4b_initial = (32 - ebase % 32) / 4` entries of 4 bytes,
+  then `compacted_2b = rounddown(totalidx - compacted_4b_initial, 16)` entries
+  of 2 bytes, then 4-byte entries (`z_erofs_load_compact_lcluster`,
+  `unpack_compacted_index`, `decode_compactedbits`)
+
+Routes ruled out, so nobody retries them:
+
+- 7-Zip 26.03 supports ext4 and SquashFS but not EROFS
+- loop-mounting the image on the device fails with EIO before erofs ever runs:
+  `/data` is file-based-encrypted, so the loop kernel thread reads ciphertext
+- WSL is not installed on this host, and installing it needs a reboot plus a
+  Windows feature
+- `my_manifest.img` holds only `build.prop` and `etc`, carries no file hashes,
+  and is itself compressed
+
+What remains is porting `unpack_compacted_index` / `decode_compactedbits` plus
+the pcluster-length rules, with LZ4 block decode from the `lz4` Python package.
+That is a project, not a patch, which is why it is not done here.
 
 ## Not done
 
