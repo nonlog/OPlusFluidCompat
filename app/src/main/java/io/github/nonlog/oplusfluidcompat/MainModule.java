@@ -30,6 +30,26 @@ public final class MainModule extends XposedModule {
             "d7c0a5dc11f40e7c89b2687a5a89a7db1fa2365ddb3fb3110214b2e7f19862db";
     private static final String AMAP_LIVE_ALERT_SERVICE_URI = AmapCompatibilityPolicy.SERVICE_URI;
 
+    /*
+     * RUS profile to build the AMap entry from.
+     *
+     * The entry has to carry two independent attribute families: the live-update channel
+     * (update_state_enable, la_score, la_tlevel, service_type) and the immersive pair
+     * (lockImmersiveEnable, lockImmersiveDefault). laid_com.amap.navi.demo carries only the
+     * immersive pair, so a card built from it never receives maneuver/distance/road and falls
+     * back to the notification's own text.
+     *
+     * default_com.android.systemui_268452006 is the only entry in this ROM's table carrying
+     * both families, so it is used as-is and only args[0] is overridden. That deliberately
+     * avoids guessing field indices: the obfuscated 'a'..'y' declaration order cannot be
+     * derived from the type signature (types[19] is List while toString lists lockImmersiveEnable
+     * at that position), so no index is written except the id.
+     *
+     * Full evidence chain in docs/COS_SYSTEM_COMPANION.md.
+     */
+    private static final String RUS_TEMPLATE_PRIMARY = "default_com.android.systemui_268452006";
+    private static final String RUS_TEMPLATE_FALLBACK = "laid_com.amap.navi.demo";
+
     private static final String KEY_LIVE_ALERT_SERVICE = "liveAlertService";
     private static final String KEY_IMMERSIVE_CARD_TYPE = "immersiveCardType";
     private final Set<ClassLoader> examinedLoaders = ConcurrentHashMap.newKeySet();
@@ -226,7 +246,12 @@ public final class MainModule extends XposedModule {
                 }
                 try {
                     Map<?, ?> configurations = (Map<?, ?>) mapField.get(chain.getThisObject());
-                    Object template = configurations.get("laid_com.amap.navi.demo");
+                    String templateId = RUS_TEMPLATE_PRIMARY;
+                    Object template = configurations.get(templateId);
+                    if (!dataClass.isInstance(template)) {
+                        templateId = RUS_TEMPLATE_FALLBACK;
+                        template = configurations.get(templateId);
+                    }
                     if (!dataClass.isInstance(template)) return existing;
                     synchronized (cache) {
                         if (cache[0] != template) {
@@ -235,12 +260,17 @@ public final class MainModule extends XposedModule {
                                 args[index] = fields[index].get(template);
                             }
                             args[0] = AmapCompatibilityPolicy.RUS_ID;
-                            // Copy the ROM's existing navigation profile; never mutate it or the DB.
+                            // Copy the ROM's profile; never mutate it or the DB.
                             cache[1] = dataConstructor.newInstance(args);
                             cache[0] = template;
-                            logOnce("amap-rus", "restored missing AMap native navigation RUS profile; "
-                                    + "lockImmersiveEnable=" + args[22]
+                            logOnce("amap-rus", "AMap RUS profile built from " + templateId
+                                    + "; lockImmersiveEnable=" + args[22]
                                     + ", lockImmersiveDefault=" + args[23]);
+                            // Dump the whole obfuscated field vector once. The XML attribute to
+                            // field-index mapping is not derivable from the type signature alone,
+                            // so this is what makes a second iteration measurement instead of a
+                            // guess if the primary template turns out to be the wrong choice.
+                            logOnce("amap-rus-fields", describeRusFields(templateId, fields, args));
                         }
                         return cache[1];
                     }
@@ -257,6 +287,22 @@ public final class MainModule extends XposedModule {
             examinedLoaders.add(loader);
             log(Log.ERROR, TAG, "native Seedling profile not installed", error);
         }
+    }
+
+    /**
+     * One-shot dump of the obfuscated RUS field vector ('a'..'y') so the XML attribute to field
+     * index mapping can be read off a real device instead of inferred. Values are truncated
+     * because one field is a List.
+     */
+    private static String describeRusFields(String templateId, Field[] fields, Object[] args) {
+        StringBuilder sb = new StringBuilder("RUS template ").append(templateId).append(": ");
+        for (int index = 0; index < fields.length; index++) {
+            if (index > 0) sb.append(", ");
+            String value = String.valueOf(args[index]);
+            if (value.length() > 60) value = value.substring(0, 60) + "...";
+            sb.append((char) ('a' + index)).append('=').append(value);
+        }
+        return sb.toString();
     }
 
     /** Prefer the native map on initial creation, without editing saved display preferences. */
